@@ -150,8 +150,14 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
             _LOGGER.warning("No Sonos speakers found")
             return
 
-        hass.data[DATA_SONOS] = [SonosDevice(p) for p in players]
-        add_devices(hass.data[DATA_SONOS], True)
+        # Add coordinators first so they can be queried by slaves
+        coordinators = [SonosDevice(p) for p in players if p.is_coordinator]
+        slaves = [SonosDevice(p) for p in players if not p.is_coordinator]
+        hass.data[DATA_SONOS] = coordinators + slaves
+        if coordinators:
+            add_devices(coordinators, True)
+        if slaves:
+            add_devices(slaves, True)
         _LOGGER.info("Added %s Sonos speakers", len(players))
 
     descriptions = load_yaml_config_file(
@@ -321,7 +327,6 @@ class SonosDevice(MediaPlayerDevice):
         self._media_album_name = None
         self._media_title = None
         self._media_radio_show = None
-        self._media_next_title = None
         self._available = True
         self._support_previous_track = False
         self._support_next_track = False
@@ -440,7 +445,6 @@ class SonosDevice(MediaPlayerDevice):
             self._media_album_name = None
             self._media_title = None
             self._media_radio_show = None
-            self._media_next_title = None
             self._current_track_uri = None
             self._current_track_is_radio_stream = False
             self._support_previous_track = False
@@ -733,17 +737,6 @@ class SonosDevice(MediaPlayerDevice):
                     next_track_uri
                 )
 
-            next_track_metadata = event.variables.get('next_track_meta_data')
-            if next_track_metadata:
-                next_track = '{title} - {creator}'.format(
-                    title=next_track_metadata.title,
-                    creator=next_track_metadata.creator
-                )
-                if next_track != self._media_next_title:
-                    self._media_next_title = next_track
-            else:
-                self._media_next_title = None
-
         elif event.service == self._player.renderingControl:
             if 'volume' in event.variables:
                 self._player_volume = int(
@@ -915,8 +908,8 @@ class SonosDevice(MediaPlayerDevice):
         """Replace queue with playlist represented by src.
 
         Playlists can't be played directly with the self._player.play_uri
-        API as they are actually composed of mulitple URLs. Until soco has
-        suppport for playing a playlist, we'll need to parse the playlist item
+        API as they are actually composed of multiple URLs. Until soco has
+        support for playing a playlist, we'll need to parse the playlist item
         and replace the current queue in order to play it.
         """
         import soco
@@ -1116,7 +1109,7 @@ class SonosDevice(MediaPlayerDevice):
                 return
 
             ##
-            # old is allready master, rejoin
+            # old is already master, rejoin
             if old.coordinator.group.coordinator == old.coordinator:
                 self._player.join(old.coordinator)
                 return
