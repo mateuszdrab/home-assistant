@@ -78,9 +78,7 @@ class DenonDevice(MediaPlayerDevice):
 
     def _setup_sources(self, telnet):
         # NSFRN - Network name
-        nsfrn = self.telnet_request(telnet, 'NSFRN ?')[len('NSFRN '):]
-        if nsfrn:
-            self._name = nsfrn
+        self._name = self.telnet_request(telnet, 'NSFRN ?')[len('NSFRN '):]
 
         # SSFUN - Configured sources with names
         self._source_list = {}
@@ -112,7 +110,7 @@ class DenonDevice(MediaPlayerDevice):
 
         if all_lines:
             return lines
-        return lines[0] if lines else ''
+        return lines[0]
 
     def telnet_command(self, command):
         """Establish a telnet connection and sends `command`."""
@@ -227,7 +225,7 @@ class DenonDevice(MediaPlayerDevice):
         self.telnet_command('MU' + ('ON' if mute else 'OFF'))
 
     def media_play(self):
-        """Play media player."""
+        """Play media media player."""
         self.telnet_command('NS9A')
 
     def media_pause(self):

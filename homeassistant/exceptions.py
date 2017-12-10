@@ -32,9 +32,3 @@ class PlatformNotReady(HomeAssistantError):
     """Error to indicate that platform is not ready."""
 
     pass
-
-
-class InvalidStateError(HomeAssistantError):
-    """When an invalid state is encountered."""
-
-    pass

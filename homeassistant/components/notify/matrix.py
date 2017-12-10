@@ -5,6 +5,7 @@ For more details about this platform, please refer to the documentation at
 https://home-assistant.io/components/notify.matrix/
 """
 import logging
+import json
 import os
 from urllib.parse import urlparse
 
@@ -14,7 +15,6 @@ import homeassistant.helpers.config_validation as cv
 from homeassistant.components.notify import (ATTR_TARGET, PLATFORM_SCHEMA,
                                              BaseNotificationService)
 from homeassistant.const import CONF_USERNAME, CONF_PASSWORD, CONF_VERIFY_SSL
-from homeassistant.util.json import load_json, save_json
 
 REQUIREMENTS = ['matrix-client==0.0.6']
 
@@ -82,7 +82,8 @@ class MatrixNotificationService(BaseNotificationService):
             return {}
 
         try:
-            data = load_json(self.session_filepath)
+            with open(self.session_filepath) as handle:
+                data = json.load(handle)
 
             auth_tokens = {}
             for mx_id, token in data.items():
@@ -100,7 +101,16 @@ class MatrixNotificationService(BaseNotificationService):
         """Store authentication token to session and persistent storage."""
         self.auth_tokens[self.mx_id] = token
 
-        save_json(self.session_filepath, self.auth_tokens)
+        try:
+            with open(self.session_filepath, 'w') as handle:
+                handle.write(json.dumps(self.auth_tokens))
+
+        # Not saving the tokens to disk should not stop the client, we can just
+        # login using the password every time.
+        except (OSError, IOError, PermissionError) as ex:
+            _LOGGER.warning(
+                "Storing authentication tokens to file '%s' failed: %s",
+                self.session_filepath, str(ex))
 
     def login(self):
         """Login to the matrix homeserver and return the client instance."""

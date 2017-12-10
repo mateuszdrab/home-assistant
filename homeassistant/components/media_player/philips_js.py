@@ -151,11 +151,11 @@ class PhilipsTV(MediaPlayerDevice):
             self._state = STATE_OFF
 
     def media_previous_track(self):
-        """Send rewind command."""
+        """Send rewind commmand."""
         self._tv.sendKey('Previous')
 
     def media_next_track(self):
-        """Send fast forward command."""
+        """Send fast forward commmand."""
         self._tv.sendKey('Next')
 
     @property

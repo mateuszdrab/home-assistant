@@ -17,6 +17,7 @@ from homeassistant.const import (
     HTTP_BAD_REQUEST, CONF_DOMAINS, CONF_ENTITIES, CONF_EXCLUDE, CONF_INCLUDE)
 import homeassistant.util.dt as dt_util
 from homeassistant.components import recorder, script
+from homeassistant.components.frontend import register_built_in_panel
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.const import ATTR_HIDDEN
 from homeassistant.components.recorder.util import session_scope, execute
@@ -40,7 +41,6 @@ def last_recorder_run(hass):
 
     with session_scope(hass=hass) as session:
         res = (session.query(RecorderRuns)
-               .filter(RecorderRuns.end.isnot(None))
                .order_by(RecorderRuns.end.desc()).first())
         if res is None:
             return None
@@ -48,8 +48,8 @@ def last_recorder_run(hass):
         return res
 
 
-def get_significant_states(hass, start_time, end_time=None, entity_ids=None,
-                           filters=None, include_start_time_state=True):
+def get_significant_states(hass, start_time, end_time=None, entity_id=None,
+                           filters=None):
     """
     Return states changes during UTC period start_time - end_time.
 
@@ -59,6 +59,8 @@ def get_significant_states(hass, start_time, end_time=None, entity_ids=None,
     """
     timer_start = time.perf_counter()
     from homeassistant.components.recorder.models import States
+
+    entity_ids = (entity_id.lower(), ) if entity_id is not None else None
 
     with session_scope(hass=hass) as session:
         query = session.query(States).filter(
@@ -84,9 +86,7 @@ def get_significant_states(hass, start_time, end_time=None, entity_ids=None,
         _LOGGER.debug(
             'get_significant_states took %fs', elapsed)
 
-    return states_to_json(
-        hass, states, start_time, entity_ids, filters,
-        include_start_time_state)
+    return states_to_json(hass, states, start_time, entity_id, filters)
 
 
 def state_changes_during_period(hass, start_time, end_time=None,
@@ -105,12 +105,10 @@ def state_changes_during_period(hass, start_time, end_time=None,
         if entity_id is not None:
             query = query.filter_by(entity_id=entity_id.lower())
 
-        entity_ids = [entity_id] if entity_id is not None else None
-
         states = execute(
             query.order_by(States.last_updated))
 
-    return states_to_json(hass, states, start_time, entity_ids)
+    return states_to_json(hass, states, start_time, entity_id)
 
 
 def get_states(hass, utc_point_in_time, entity_ids=None, run=None,
@@ -187,13 +185,7 @@ def get_states(hass, utc_point_in_time, entity_ids=None, run=None,
                 if not state.attributes.get(ATTR_HIDDEN, False)]
 
 
-def states_to_json(
-        hass,
-        states,
-        start_time,
-        entity_ids,
-        filters=None,
-        include_start_time_state=True):
+def states_to_json(hass, states, start_time, entity_id, filters=None):
     """Convert SQL results into JSON friendly data structure.
 
     This takes our state list and turns it into a JSON friendly data
@@ -205,13 +197,14 @@ def states_to_json(
     """
     result = defaultdict(list)
 
+    entity_ids = [entity_id] if entity_id is not None else None
+
     # Get the states at the start time
     timer_start = time.perf_counter()
-    if include_start_time_state:
-        for state in get_states(hass, start_time, entity_ids, filters=filters):
-            state.last_changed = start_time
-            state.last_updated = start_time
-            result[state.entity_id].append(state)
+    for state in get_states(hass, start_time, entity_ids, filters=filters):
+        state.last_changed = start_time
+        state.last_updated = start_time
+        result[state.entity_id].append(state)
 
     if _LOGGER.isEnabledFor(logging.DEBUG):
         elapsed = time.perf_counter() - timer_start
@@ -230,8 +223,8 @@ def get_state(hass, utc_point_in_time, entity_id, run=None):
     return states[0] if states else None
 
 
-@asyncio.coroutine
-def async_setup(hass, config):
+# pylint: disable=unused-argument
+def setup(hass, config):
     """Set up the history hooks."""
     filters = Filters()
     exclude = config[DOMAIN].get(CONF_EXCLUDE)
@@ -244,8 +237,7 @@ def async_setup(hass, config):
         filters.included_domains = include[CONF_DOMAINS]
 
     hass.http.register_view(HistoryPeriodView(filters))
-    yield from hass.components.frontend.async_register_built_in_panel(
-        'history', 'history', 'mdi:poll-box')
+    register_built_in_panel(hass, 'history', 'History', 'mdi:poll-box')
 
     return True
 
@@ -258,7 +250,7 @@ class HistoryPeriodView(HomeAssistantView):
     extra_urls = ['/api/history/period/{datetime}']
 
     def __init__(self, filters):
-        """Initialize the history period view."""
+        """Initilalize the history period view."""
         self.filters = filters
 
     @asyncio.coroutine
@@ -284,21 +276,17 @@ class HistoryPeriodView(HomeAssistantView):
 
         end_time = request.query.get('end_time')
         if end_time:
-            end_time = dt_util.parse_datetime(end_time)
-            if end_time:
-                end_time = dt_util.as_utc(end_time)
-            else:
+            end_time = dt_util.as_utc(
+                dt_util.parse_datetime(end_time))
+            if end_time is None:
                 return self.json_message('Invalid end_time', HTTP_BAD_REQUEST)
         else:
             end_time = start_time + one_day
-        entity_ids = request.query.get('filter_entity_id')
-        if entity_ids:
-            entity_ids = entity_ids.lower().split(',')
-        include_start_time_state = 'skip_initial_state' not in request.query
+        entity_id = request.query.get('filter_entity_id')
 
         result = yield from request.app['hass'].async_add_job(
             get_significant_states, request.app['hass'], start_time, end_time,
-            entity_ids, self.filters, include_start_time_state)
+            entity_id, self.filters)
         result = result.values()
         if _LOGGER.isEnabledFor(logging.DEBUG):
             elapsed = time.perf_counter() - timer_start

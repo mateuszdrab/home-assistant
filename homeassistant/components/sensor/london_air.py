@@ -31,6 +31,7 @@ AUTHORITIES = [
     'Enfield',
     'Greenwich',
     'Hackney',
+    'Hammersmith and Fulham',
     'Haringey',
     'Harrow',
     'Havering',

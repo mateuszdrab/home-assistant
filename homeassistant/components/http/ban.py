@@ -6,7 +6,6 @@ from ipaddress import ip_address
 import logging
 import os
 
-from aiohttp.web import middleware
 from aiohttp.web_exceptions import HTTPForbidden, HTTPUnauthorized
 import voluptuous as vol
 
@@ -33,32 +32,35 @@ SCHEMA_IP_BAN_ENTRY = vol.Schema({
 })
 
 
-@middleware
 @asyncio.coroutine
-def ban_middleware(request, handler):
+def ban_middleware(app, handler):
     """IP Ban middleware."""
-    if not request.app[KEY_BANS_ENABLED]:
-        return (yield from handler(request))
+    if not app[KEY_BANS_ENABLED]:
+        return handler
 
-    if KEY_BANNED_IPS not in request.app:
-        hass = request.app['hass']
-        request.app[KEY_BANNED_IPS] = yield from hass.async_add_job(
+    if KEY_BANNED_IPS not in app:
+        hass = app['hass']
+        app[KEY_BANNED_IPS] = yield from hass.async_add_job(
             load_ip_bans_config, hass.config.path(IP_BANS_FILE))
 
-    # Verify if IP is not banned
-    ip_address_ = get_real_ip(request)
+    @asyncio.coroutine
+    def ban_middleware_handler(request):
+        """Verify if IP is not banned."""
+        ip_address_ = get_real_ip(request)
 
-    is_banned = any(ip_ban.ip_address == ip_address_
-                    for ip_ban in request.app[KEY_BANNED_IPS])
+        is_banned = any(ip_ban.ip_address == ip_address_
+                        for ip_ban in request.app[KEY_BANNED_IPS])
 
-    if is_banned:
-        raise HTTPForbidden()
+        if is_banned:
+            raise HTTPForbidden()
 
-    try:
-        return (yield from handler(request))
-    except HTTPUnauthorized:
-        yield from process_wrong_login(request)
-        raise
+        try:
+            return (yield from handler(request))
+        except HTTPUnauthorized:
+            yield from process_wrong_login(request)
+            raise
+
+    return ban_middleware_handler
 
 
 @asyncio.coroutine

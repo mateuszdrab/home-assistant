@@ -20,18 +20,15 @@ from homeassistant.helpers.event import async_track_state_change
 
 _LOGGER = logging.getLogger(__name__)
 
-ATTR_HYSTERESIS = 'hysteresis'
 ATTR_SENSOR_VALUE = 'sensor_value'
 ATTR_THRESHOLD = 'threshold'
 ATTR_TYPE = 'type'
 
-CONF_HYSTERESIS = 'hysteresis'
 CONF_LOWER = 'lower'
 CONF_THRESHOLD = 'threshold'
 CONF_UPPER = 'upper'
 
 DEFAULT_NAME = 'Threshold'
-DEFAULT_HYSTERESIS = 0.0
 
 SENSOR_TYPES = [CONF_LOWER, CONF_UPPER]
 
@@ -39,8 +36,6 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Required(CONF_ENTITY_ID): cv.entity_id,
     vol.Required(CONF_THRESHOLD): vol.Coerce(float),
     vol.Required(CONF_TYPE): vol.In(SENSOR_TYPES),
-    vol.Optional(
-        CONF_HYSTERESIS, default=DEFAULT_HYSTERESIS): vol.Coerce(float),
     vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
     vol.Optional(CONF_DEVICE_CLASS): DEVICE_CLASSES_SCHEMA,
 })
@@ -52,32 +47,28 @@ def async_setup_platform(hass, config, async_add_devices, discovery_info=None):
     entity_id = config.get(CONF_ENTITY_ID)
     name = config.get(CONF_NAME)
     threshold = config.get(CONF_THRESHOLD)
-    hysteresis = config.get(CONF_HYSTERESIS)
     limit_type = config.get(CONF_TYPE)
     device_class = config.get(CONF_DEVICE_CLASS)
 
-    async_add_devices([ThresholdSensor(
-        hass, entity_id, name, threshold,
-        hysteresis, limit_type, device_class)
-                      ], True)
-
+    async_add_devices(
+        [ThresholdSensor(hass, entity_id, name, threshold, limit_type,
+                         device_class)], True)
     return True
 
 
 class ThresholdSensor(BinarySensorDevice):
     """Representation of a Threshold sensor."""
 
-    def __init__(self, hass, entity_id, name, threshold,
-                 hysteresis, limit_type, device_class):
+    def __init__(self, hass, entity_id, name, threshold, limit_type,
+                 device_class):
         """Initialize the Threshold sensor."""
         self._hass = hass
         self._entity_id = entity_id
         self.is_upper = limit_type == 'upper'
         self._name = name
         self._threshold = threshold
-        self._hysteresis = hysteresis
         self._device_class = device_class
-        self._state = False
+        self._deviation = False
         self.sensor_value = 0
 
         @callback
@@ -106,7 +97,7 @@ class ThresholdSensor(BinarySensorDevice):
     @property
     def is_on(self):
         """Return true if sensor is on."""
-        return self._state
+        return self._deviation
 
     @property
     def should_poll(self):
@@ -125,16 +116,13 @@ class ThresholdSensor(BinarySensorDevice):
             ATTR_ENTITY_ID: self._entity_id,
             ATTR_SENSOR_VALUE: self.sensor_value,
             ATTR_THRESHOLD: self._threshold,
-            ATTR_HYSTERESIS: self._hysteresis,
             ATTR_TYPE: CONF_UPPER if self.is_upper else CONF_LOWER,
         }
 
     @asyncio.coroutine
     def async_update(self):
         """Get the latest data and updates the states."""
-        if self._hysteresis == 0 and self.sensor_value == self._threshold:
-            self._state = False
-        elif self.sensor_value > (self._threshold + self._hysteresis):
-            self._state = self.is_upper
-        elif self.sensor_value < (self._threshold - self._hysteresis):
-            self._state = not self.is_upper
+        if self.is_upper:
+            self._deviation = bool(self.sensor_value > self._threshold)
+        else:
+            self._deviation = bool(self.sensor_value < self._threshold)

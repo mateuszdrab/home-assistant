@@ -6,54 +6,49 @@ https://home-assistant.io/components/notify.simplepush/
 """
 import logging
 
+import requests
 import voluptuous as vol
 
-import homeassistant.helpers.config_validation as cv
 from homeassistant.components.notify import (
     ATTR_TITLE, ATTR_TITLE_DEFAULT, PLATFORM_SCHEMA, BaseNotificationService)
-from homeassistant.const import CONF_PASSWORD
-
-REQUIREMENTS = ['simplepush==1.1.4']
+import homeassistant.helpers.config_validation as cv
 
 _LOGGER = logging.getLogger(__name__)
-
-ATTR_ENCRYPTED = 'encrypted'
+_RESOURCE = 'https://api.simplepush.io/send'
 
 CONF_DEVICE_KEY = 'device_key'
-CONF_EVENT = 'event'
-CONF_SALT = 'salt'
+
+DEFAULT_TIMEOUT = 10
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Required(CONF_DEVICE_KEY): cv.string,
-    vol.Optional(CONF_EVENT): cv.string,
-    vol.Inclusive(CONF_PASSWORD, ATTR_ENCRYPTED): cv.string,
-    vol.Inclusive(CONF_SALT, ATTR_ENCRYPTED): cv.string,
 })
 
 
 def get_service(hass, config, discovery_info=None):
     """Get the Simplepush notification service."""
-    return SimplePushNotificationService(config)
+    return SimplePushNotificationService(config.get(CONF_DEVICE_KEY))
 
 
 class SimplePushNotificationService(BaseNotificationService):
-    """Implementation of the notification service for Simplepush."""
+    """Implementation of the notification service for SimplePush."""
 
-    def __init__(self, config):
-        """Initialize the Simplepush notification service."""
-        self._device_key = config.get(CONF_DEVICE_KEY)
-        self._event = config.get(CONF_EVENT)
-        self._password = config.get(CONF_PASSWORD)
-        self._salt = config.get(CONF_SALT)
+    def __init__(self, device_key):
+        """Initialize the service."""
+        self._device_key = device_key
 
     def send_message(self, message='', **kwargs):
-        """Send a message to a Simplepush user."""
-        from simplepush import send, send_encrypted
-
+        """Send a message to a user."""
         title = kwargs.get(ATTR_TITLE, ATTR_TITLE_DEFAULT)
 
-        if self._password:
-            send_encrypted(self._device_key, self._password, self._salt, title,
-                           message, event=self._event)
-        else:
-            send(self._device_key, title, message, event=self._event)
+        # Upstream bug will be fixed soon, but no dead-line available.
+        # payload = 'key={}&title={}&msg={}'.format(
+        #     self._device_key, title, message).replace(' ', '%')
+        # response = requests.get(
+        #     _RESOURCE, data=payload, timeout=DEFAULT_TIMEOUT)
+        response = requests.get(
+            '{}/{}/{}/{}'.format(_RESOURCE, self._device_key, title, message),
+            timeout=DEFAULT_TIMEOUT)
+
+        if response.json()['status'] != 'OK':
+            _LOGGER.error("Not possible to send notification")

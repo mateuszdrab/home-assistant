@@ -8,10 +8,9 @@ import asyncio
 import logging
 
 from homeassistant.components.amcrest import (
-    DATA_AMCREST, STREAM_SOURCE_LIST, TIMEOUT)
+    STREAM_SOURCE_LIST, TIMEOUT)
 from homeassistant.components.camera import Camera
 from homeassistant.components.ffmpeg import DATA_FFMPEG
-from homeassistant.const import CONF_NAME
 from homeassistant.helpers.aiohttp_client import (
     async_get_clientsession, async_aiohttp_proxy_web,
     async_aiohttp_proxy_stream)
@@ -27,10 +26,21 @@ def async_setup_platform(hass, config, async_add_devices, discovery_info=None):
     if discovery_info is None:
         return
 
-    device_name = discovery_info[CONF_NAME]
-    amcrest = hass.data[DATA_AMCREST][device_name]
+    device = discovery_info['device']
+    authentication = discovery_info['authentication']
+    ffmpeg_arguments = discovery_info['ffmpeg_arguments']
+    name = discovery_info['name']
+    resolution = discovery_info['resolution']
+    stream_source = discovery_info['stream_source']
 
-    async_add_devices([AmcrestCam(hass, amcrest)], True)
+    async_add_devices([
+        AmcrestCam(hass,
+                   name,
+                   device,
+                   authentication,
+                   ffmpeg_arguments,
+                   stream_source,
+                   resolution)], True)
 
     return True
 
@@ -38,20 +48,21 @@ def async_setup_platform(hass, config, async_add_devices, discovery_info=None):
 class AmcrestCam(Camera):
     """An implementation of an Amcrest IP camera."""
 
-    def __init__(self, hass, amcrest):
+    def __init__(self, hass, name, camera, authentication,
+                 ffmpeg_arguments, stream_source, resolution):
         """Initialize an Amcrest camera."""
         super(AmcrestCam, self).__init__()
-        self._name = amcrest.name
-        self._camera = amcrest.device
+        self._name = name
+        self._camera = camera
         self._base_url = self._camera.get_base_url()
         self._ffmpeg = hass.data[DATA_FFMPEG]
-        self._ffmpeg_arguments = amcrest.ffmpeg_arguments
-        self._stream_source = amcrest.stream_source
-        self._resolution = amcrest.resolution
-        self._token = self._auth = amcrest.authentication
+        self._ffmpeg_arguments = ffmpeg_arguments
+        self._stream_source = stream_source
+        self._resolution = resolution
+        self._token = self._auth = authentication
 
     def camera_image(self):
-        """Return a still image response from the camera."""
+        """Return a still image reponse from the camera."""
         # Send the request to snap a picture and return raw jpg data
         response = self._camera.snapshot(channel=self._resolution)
         return response.data

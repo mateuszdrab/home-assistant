@@ -22,7 +22,7 @@ import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.config_validation import PLATFORM_SCHEMA  # noqa
 from homeassistant.helpers.entity_component import EntityComponent
 from homeassistant.helpers.entity import ToggleEntity
-from homeassistant.helpers.icon import icon_for_battery_level
+from homeassistant.util.icon import icon_for_battery_level
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -200,7 +200,13 @@ def async_setup(hass, config):
             yield from getattr(vacuum, method['method'])(**params)
             if not vacuum.should_poll:
                 continue
-            update_tasks.append(vacuum.async_update_ha_state(True))
+
+            update_coro = hass.async_add_job(
+                vacuum.async_update_ha_state(True))
+            if hasattr(vacuum, 'async_update'):
+                update_tasks.append(update_coro)
+            else:
+                yield from update_coro
 
         if update_tasks:
             yield from asyncio.wait(update_tasks, loop=hass.loop)

@@ -30,7 +30,7 @@ from homeassistant.const import (
     CONF_PASSWORD, CONF_PORT, CONF_PROTOCOL, CONF_PAYLOAD)
 from homeassistant.components.mqtt.server import HBMQTT_CONFIG_SCHEMA
 
-REQUIREMENTS = ['paho-mqtt==1.3.1']
+REQUIREMENTS = ['paho-mqtt==1.3.0']
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -438,8 +438,7 @@ class MQTT(object):
         self.broker = broker
         self.port = port
         self.keepalive = keepalive
-        self.wanted_topics = {}
-        self.subscribed_topics = {}
+        self.topics = {}
         self.progress = {}
         self.birth_message = birth_message
         self._mqttc = None
@@ -527,14 +526,15 @@ class MQTT(object):
             raise HomeAssistantError("topic need to be a string!")
 
         with (yield from self._paho_lock):
-            if topic in self.subscribed_topics:
+            if topic in self.topics:
                 return
-            self.wanted_topics[topic] = qos
+
             result, mid = yield from self.hass.async_add_job(
                 self._mqttc.subscribe, topic, qos)
 
             _raise_on_error(result)
             self.progress[mid] = topic
+            self.topics[topic] = None
 
     @asyncio.coroutine
     def async_unsubscribe(self, topic):
@@ -542,7 +542,6 @@ class MQTT(object):
 
         This method is a coroutine.
         """
-        self.wanted_topics.pop(topic, None)
         result, mid = yield from self.hass.async_add_job(
             self._mqttc.unsubscribe, topic)
 
@@ -563,10 +562,15 @@ class MQTT(object):
             self._mqttc.disconnect()
             return
 
-        self.progress = {}
-        self.subscribed_topics = {}
-        for topic, qos in self.wanted_topics.items():
-            self.hass.add_job(self.async_subscribe, topic, qos)
+        old_topics = self.topics
+
+        self.topics = {key: value for key, value in self.topics.items()
+                       if value is None}
+
+        for topic, qos in old_topics.items():
+            # qos is None if we were in process of subscribing
+            if qos is not None:
+                self.hass.add_job(self.async_subscribe, topic, qos)
 
         if self.birth_message:
             self.hass.add_job(self.async_publish(
@@ -580,7 +584,7 @@ class MQTT(object):
         topic = self.progress.pop(mid, None)
         if topic is None:
             return
-        self.subscribed_topics[topic] = granted_qos[0]
+        self.topics[topic] = granted_qos[0]
 
     def _mqtt_on_message(self, _mqttc, _userdata, msg):
         """Message received callback."""
@@ -594,12 +598,18 @@ class MQTT(object):
         topic = self.progress.pop(mid, None)
         if topic is None:
             return
-        self.subscribed_topics.pop(topic, None)
+        self.topics.pop(topic, None)
 
     def _mqtt_on_disconnect(self, _mqttc, _userdata, result_code):
         """Disconnected callback."""
         self.progress = {}
-        self.subscribed_topics = {}
+        self.topics = {key: value for key, value in self.topics.items()
+                       if value is not None}
+
+        # Remove None values from topic list
+        for key in list(self.topics):
+            if self.topics[key] is None:
+                self.topics.pop(key)
 
         # When disconnected because of calling disconnect()
         if result_code == 0:

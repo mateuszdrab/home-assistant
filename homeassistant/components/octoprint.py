@@ -9,7 +9,6 @@ import time
 
 import requests
 import voluptuous as vol
-from aiohttp.hdrs import CONTENT_TYPE
 
 from homeassistant.const import CONF_API_KEY, CONF_HOST, CONTENT_TYPE_JSON
 import homeassistant.helpers.config_validation as cv
@@ -56,10 +55,8 @@ class OctoPrintAPI(object):
     def __init__(self, api_url, key, bed, number_of_tools):
         """Initialize OctoPrint API and set headers needed later."""
         self.api_url = api_url
-        self.headers = {
-            CONTENT_TYPE: CONTENT_TYPE_JSON,
-            'X-Api-Key': key,
-        }
+        self.headers = {'content-type': CONTENT_TYPE_JSON,
+                        'X-Api-Key': key}
         self.printer_last_reading = [{}, None]
         self.job_last_reading = [{}, None]
         self.job_available = False

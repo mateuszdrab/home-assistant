@@ -1,6 +1,5 @@
 """Helper for aiohttp webclient stuff."""
 import asyncio
-import ssl
 import sys
 
 import aiohttp
@@ -8,11 +7,10 @@ from aiohttp.hdrs import USER_AGENT, CONTENT_TYPE
 from aiohttp import web
 from aiohttp.web_exceptions import HTTPGatewayTimeout, HTTPBadGateway
 import async_timeout
-import certifi
 
 from homeassistant.core import callback
-from homeassistant.const import EVENT_HOMEASSISTANT_CLOSE, __version__
-from homeassistant.loader import bind_hass
+from homeassistant.const import EVENT_HOMEASSISTANT_CLOSE
+from homeassistant.const import __version__
 
 DATA_CONNECTOR = 'aiohttp_connector'
 DATA_CONNECTOR_NOTVERIFY = 'aiohttp_connector_notverify'
@@ -23,7 +21,6 @@ SERVER_SOFTWARE = 'HomeAssistant/{0} aiohttp/{1} Python/{2[0]}.{2[1]}'.format(
 
 
 @callback
-@bind_hass
 def async_get_clientsession(hass, verify_ssl=True):
     """Return default aiohttp ClientSession.
 
@@ -48,7 +45,6 @@ def async_get_clientsession(hass, verify_ssl=True):
 
 
 @callback
-@bind_hass
 def async_create_clientsession(hass, verify_ssl=True, auto_cleanup=True,
                                **kwargs):
     """Create a new ClientSession with kwargs, i.e. for cookies.
@@ -75,7 +71,6 @@ def async_create_clientsession(hass, verify_ssl=True, auto_cleanup=True,
 
 
 @asyncio.coroutine
-@bind_hass
 def async_aiohttp_proxy_web(hass, request, web_coro, buffer_size=102400,
                             timeout=10):
     """Stream websession request to aiohttp web response."""
@@ -107,7 +102,6 @@ def async_aiohttp_proxy_web(hass, request, web_coro, buffer_size=102400,
 
 
 @asyncio.coroutine
-@bind_hass
 def async_aiohttp_proxy_stream(hass, request, stream, content_type,
                                buffer_size=102400, timeout=10):
     """Stream a stream to aiohttp web response."""
@@ -161,11 +155,7 @@ def _async_get_connector(hass, verify_ssl=True):
 
     if verify_ssl:
         if DATA_CONNECTOR not in hass.data:
-            ssl_context = ssl.SSLContext(ssl.PROTOCOL_SSLv23)
-            ssl_context.load_verify_locations(cafile=certifi.where(),
-                                              capath=None)
-            connector = aiohttp.TCPConnector(loop=hass.loop,
-                                             ssl_context=ssl_context)
+            connector = aiohttp.TCPConnector(loop=hass.loop)
             hass.data[DATA_CONNECTOR] = connector
             is_new = True
         else:

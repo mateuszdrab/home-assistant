@@ -8,74 +8,52 @@ import pytest
 from homeassistant.util import async as hasync
 
 
-@patch('asyncio.coroutines.iscoroutine')
+@patch('asyncio.coroutines.iscoroutine', return_value=True)
 @patch('concurrent.futures.Future')
 @patch('threading.get_ident')
-def test_run_coroutine_threadsafe_from_inside_event_loop(
-        mock_ident, _, mock_iscoroutine):
+def test_run_coroutine_threadsafe_from_inside_event_loop(mock_ident, _, __):
     """Testing calling run_coroutine_threadsafe from inside an event loop."""
     coro = MagicMock()
     loop = MagicMock()
 
     loop._thread_ident = None
     mock_ident.return_value = 5
-    mock_iscoroutine.return_value = True
     hasync.run_coroutine_threadsafe(coro, loop)
     assert len(loop.call_soon_threadsafe.mock_calls) == 1
 
     loop._thread_ident = 5
     mock_ident.return_value = 5
-    mock_iscoroutine.return_value = True
     with pytest.raises(RuntimeError):
         hasync.run_coroutine_threadsafe(coro, loop)
     assert len(loop.call_soon_threadsafe.mock_calls) == 1
 
     loop._thread_ident = 1
     mock_ident.return_value = 5
-    mock_iscoroutine.return_value = False
-    with pytest.raises(TypeError):
-        hasync.run_coroutine_threadsafe(coro, loop)
-    assert len(loop.call_soon_threadsafe.mock_calls) == 1
-
-    loop._thread_ident = 1
-    mock_ident.return_value = 5
-    mock_iscoroutine.return_value = True
     hasync.run_coroutine_threadsafe(coro, loop)
     assert len(loop.call_soon_threadsafe.mock_calls) == 2
 
 
-@patch('asyncio.coroutines.iscoroutine')
+@patch('asyncio.coroutines.iscoroutine', return_value=True)
 @patch('concurrent.futures.Future')
 @patch('threading.get_ident')
-def test_fire_coroutine_threadsafe_from_inside_event_loop(
-        mock_ident, _, mock_iscoroutine):
+def test_fire_coroutine_threadsafe_from_inside_event_loop(mock_ident, _, __):
     """Testing calling fire_coroutine_threadsafe from inside an event loop."""
     coro = MagicMock()
     loop = MagicMock()
 
     loop._thread_ident = None
     mock_ident.return_value = 5
-    mock_iscoroutine.return_value = True
     hasync.fire_coroutine_threadsafe(coro, loop)
     assert len(loop.call_soon_threadsafe.mock_calls) == 1
 
     loop._thread_ident = 5
     mock_ident.return_value = 5
-    mock_iscoroutine.return_value = True
     with pytest.raises(RuntimeError):
         hasync.fire_coroutine_threadsafe(coro, loop)
     assert len(loop.call_soon_threadsafe.mock_calls) == 1
 
     loop._thread_ident = 1
     mock_ident.return_value = 5
-    mock_iscoroutine.return_value = False
-    with pytest.raises(TypeError):
-        hasync.fire_coroutine_threadsafe(coro, loop)
-    assert len(loop.call_soon_threadsafe.mock_calls) == 1
-
-    loop._thread_ident = 1
-    mock_ident.return_value = 5
-    mock_iscoroutine.return_value = True
     hasync.fire_coroutine_threadsafe(coro, loop)
     assert len(loop.call_soon_threadsafe.mock_calls) == 2
 
@@ -104,7 +82,7 @@ def test_run_callback_threadsafe_from_inside_event_loop(mock_ident, _):
     assert len(loop.call_soon_threadsafe.mock_calls) == 2
 
 
-class RunThreadsafeTests(test_utils.TestCase):
+class RunCoroutineThreadsafeTests(test_utils.TestCase):
     """Test case for asyncio.run_coroutine_threadsafe."""
 
     def setUp(self):
@@ -113,41 +91,26 @@ class RunThreadsafeTests(test_utils.TestCase):
         self.loop = asyncio.new_event_loop()
         self.set_event_loop(self.loop)  # Will cleanup properly
 
-    def add_callback(self, a, b, fail, invalid):
-        """Return a + b."""
-        if fail:
-            raise RuntimeError("Fail!")
-        if invalid:
-            raise ValueError("Invalid!")
-        return a + b
-
     @asyncio.coroutine
-    def add_coroutine(self, a, b, fail, invalid, cancel):
+    def add(self, a, b, fail=False, cancel=False):
         """Wait 0.05 second and return a + b."""
         yield from asyncio.sleep(0.05, loop=self.loop)
+        if fail:
+            raise RuntimeError("Fail!")
         if cancel:
             asyncio.tasks.Task.current_task(self.loop).cancel()
             yield
-        return self.add_callback(a, b, fail, invalid)
+        return a + b
 
-    def target_callback(self, fail=False, invalid=False):
-        """Run add callback in the event loop."""
-        future = hasync.run_callback_threadsafe(
-            self.loop, self.add_callback, 1, 2, fail, invalid)
-        try:
-            return future.result()
-        finally:
-            future.done() or future.cancel()
-
-    def target_coroutine(self, fail=False, invalid=False, cancel=False,
-                         timeout=None, advance_coro=False):
+    def target(self, fail=False, cancel=False, timeout=None,
+               advance_coro=False):
         """Run add coroutine in the event loop."""
-        coro = self.add_coroutine(1, 2, fail, invalid, cancel)
+        coro = self.add(1, 2, fail=fail, cancel=cancel)
         future = hasync.run_coroutine_threadsafe(coro, self.loop)
         if advance_coro:
             # this is for test_run_coroutine_threadsafe_task_factory_exception;
             # otherwise it spills errors and breaks **other** unittests, since
-            # 'target_coroutine' is interacting with threads.
+            # 'target' is interacting with threads.
 
             # With this call, `coro` will be advanced, so that
             # CoroWrapper.__del__ won't do anything when asyncio tests run
@@ -160,28 +123,20 @@ class RunThreadsafeTests(test_utils.TestCase):
 
     def test_run_coroutine_threadsafe(self):
         """Test coroutine submission from a thread to an event loop."""
-        future = self.loop.run_in_executor(None, self.target_coroutine)
+        future = self.loop.run_in_executor(None, self.target)
         result = self.loop.run_until_complete(future)
         self.assertEqual(result, 3)
 
     def test_run_coroutine_threadsafe_with_exception(self):
         """Test coroutine submission from thread to event loop on exception."""
-        future = self.loop.run_in_executor(None, self.target_coroutine, True)
+        future = self.loop.run_in_executor(None, self.target, True)
         with self.assertRaises(RuntimeError) as exc_context:
             self.loop.run_until_complete(future)
         self.assertIn("Fail!", exc_context.exception.args)
 
-    def test_run_coroutine_threadsafe_with_invalid(self):
-        """Test coroutine submission from thread to event loop on invalid."""
-        callback = lambda: self.target_coroutine(invalid=True)  # noqa
-        future = self.loop.run_in_executor(None, callback)
-        with self.assertRaises(ValueError) as exc_context:
-            self.loop.run_until_complete(future)
-        self.assertIn("Invalid!", exc_context.exception.args)
-
     def test_run_coroutine_threadsafe_with_timeout(self):
         """Test coroutine submission from thread to event loop on timeout."""
-        callback = lambda: self.target_coroutine(timeout=0)  # noqa
+        callback = lambda: self.target(timeout=0)  # noqa
         future = self.loop.run_in_executor(None, callback)
         with self.assertRaises(asyncio.TimeoutError):
             self.loop.run_until_complete(future)
@@ -192,28 +147,7 @@ class RunThreadsafeTests(test_utils.TestCase):
 
     def test_run_coroutine_threadsafe_task_cancelled(self):
         """Test coroutine submission from tread to event loop on cancel."""
-        callback = lambda: self.target_coroutine(cancel=True)  # noqa
+        callback = lambda: self.target(cancel=True)  # noqa
         future = self.loop.run_in_executor(None, callback)
         with self.assertRaises(asyncio.CancelledError):
             self.loop.run_until_complete(future)
-
-    def test_run_callback_threadsafe(self):
-        """Test callback submission from a thread to an event loop."""
-        future = self.loop.run_in_executor(None, self.target_callback)
-        result = self.loop.run_until_complete(future)
-        self.assertEqual(result, 3)
-
-    def test_run_callback_threadsafe_with_exception(self):
-        """Test callback submission from thread to event loop on exception."""
-        future = self.loop.run_in_executor(None, self.target_callback, True)
-        with self.assertRaises(RuntimeError) as exc_context:
-            self.loop.run_until_complete(future)
-        self.assertIn("Fail!", exc_context.exception.args)
-
-    def test_run_callback_threadsafe_with_invalid(self):
-        """Test callback submission from thread to event loop on invalid."""
-        callback = lambda: self.target_callback(invalid=True)  # noqa
-        future = self.loop.run_in_executor(None, callback)
-        with self.assertRaises(ValueError) as exc_context:
-            self.loop.run_until_complete(future)
-        self.assertIn("Invalid!", exc_context.exception.args)

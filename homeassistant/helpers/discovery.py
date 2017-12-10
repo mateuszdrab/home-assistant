@@ -8,7 +8,6 @@ There are two different types of discoveries that can be fired/listened for.
 import asyncio
 
 from homeassistant import setup, core
-from homeassistant.loader import bind_hass
 from homeassistant.const import (
     ATTR_DISCOVERED, ATTR_SERVICE, EVENT_PLATFORM_DISCOVERED)
 from homeassistant.exceptions import HomeAssistantError
@@ -19,7 +18,6 @@ EVENT_LOAD_PLATFORM = 'load_platform.{}'
 ATTR_PLATFORM = 'platform'
 
 
-@bind_hass
 def listen(hass, service, callback):
     """Set up listener for discovery of specific service.
 
@@ -30,7 +28,6 @@ def listen(hass, service, callback):
 
 
 @core.callback
-@bind_hass
 def async_listen(hass, service, callback):
     """Set up listener for discovery of specific service.
 
@@ -51,7 +48,6 @@ def async_listen(hass, service, callback):
     hass.bus.async_listen(EVENT_PLATFORM_DISCOVERED, discovery_event_listener)
 
 
-@bind_hass
 def discover(hass, service, discovered=None, component=None, hass_config=None):
     """Fire discovery event. Can ensure a component is loaded."""
     hass.add_job(
@@ -59,7 +55,6 @@ def discover(hass, service, discovered=None, component=None, hass_config=None):
 
 
 @asyncio.coroutine
-@bind_hass
 def async_discover(hass, service, discovered=None, component=None,
                    hass_config=None):
     """Fire discovery event. Can ensure a component is loaded."""
@@ -81,7 +76,6 @@ def async_discover(hass, service, discovered=None, component=None,
     hass.bus.async_fire(EVENT_PLATFORM_DISCOVERED, data)
 
 
-@bind_hass
 def listen_platform(hass, component, callback):
     """Register a platform loader listener."""
     run_callback_threadsafe(
@@ -89,7 +83,6 @@ def listen_platform(hass, component, callback):
     ).result()
 
 
-@bind_hass
 def async_listen_platform(hass, component, callback):
     """Register a platform loader listener.
 
@@ -116,7 +109,6 @@ def async_listen_platform(hass, component, callback):
         EVENT_PLATFORM_DISCOVERED, discovery_platform_listener)
 
 
-@bind_hass
 def load_platform(hass, component, platform, discovered=None,
                   hass_config=None):
     """Load a component and platform dynamically.
@@ -135,7 +127,6 @@ def load_platform(hass, component, platform, discovered=None,
 
 
 @asyncio.coroutine
-@bind_hass
 def async_load_platform(hass, component, platform, discovered=None,
                         hass_config=None):
     """Load a component and platform dynamically.

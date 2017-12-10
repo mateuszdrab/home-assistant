@@ -27,46 +27,40 @@ def _get_alarm_state(spc_mode):
 
 
 @asyncio.coroutine
-def async_setup_platform(hass, config, async_add_devices,
+def async_setup_platform(hass, config, async_add_entities,
                          discovery_info=None):
     """Set up the SPC alarm control panel platform."""
     if (discovery_info is None or
             discovery_info[ATTR_DISCOVER_AREAS] is None):
         return
 
-    api = hass.data[DATA_API]
-    devices = [SpcAlarm(api, area)
-               for area in discovery_info[ATTR_DISCOVER_AREAS]]
+    entities = [SpcAlarm(hass=hass,
+                         area_id=area['id'],
+                         name=area['name'],
+                         state=_get_alarm_state(area['mode']))
+                for area in discovery_info[ATTR_DISCOVER_AREAS]]
 
-    async_add_devices(devices)
+    async_add_entities(entities)
 
 
 class SpcAlarm(alarm.AlarmControlPanel):
     """Represents the SPC alarm panel."""
 
-    def __init__(self, api, area):
+    def __init__(self, hass, area_id, name, state):
         """Initialize the SPC alarm panel."""
-        self._area_id = area['id']
-        self._name = area['name']
-        self._state = _get_alarm_state(area['mode'])
-        if self._state == STATE_ALARM_DISARMED:
-            self._changed_by = area.get('last_unset_user_name', 'unknown')
-        else:
-            self._changed_by = area.get('last_set_user_name', 'unknown')
-        self._api = api
+        self._hass = hass
+        self._area_id = area_id
+        self._name = name
+        self._state = state
+        self._api = hass.data[DATA_API]
+
+        hass.data[DATA_REGISTRY].register_alarm_device(area_id, self)
 
     @asyncio.coroutine
-    def async_added_to_hass(self):
-        """Calbback for init handlers."""
-        self.hass.data[DATA_REGISTRY].register_alarm_device(
-            self._area_id, self)
-
-    @asyncio.coroutine
-    def async_update_from_spc(self, state, extra):
+    def async_update_from_spc(self, state):
         """Update the alarm panel with a new state."""
         self._state = state
-        self._changed_by = extra.get('changed_by', 'unknown')
-        self.async_schedule_update_ha_state()
+        yield from self.async_update_ha_state()
 
     @property
     def should_poll(self):
@@ -77,11 +71,6 @@ class SpcAlarm(alarm.AlarmControlPanel):
     def name(self):
         """Return the name of the device."""
         return self._name
-
-    @property
-    def changed_by(self):
-        """Return the user the last change was triggered by."""
-        return self._changed_by
 
     @property
     def state(self):

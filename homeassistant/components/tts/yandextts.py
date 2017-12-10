@@ -63,13 +63,6 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
         vol.Range(min=MIN_SPEED, max=MAX_SPEED)
 })
 
-SUPPORTED_OPTIONS = [
-    CONF_CODEC,
-    CONF_VOICE,
-    CONF_EMOTION,
-    CONF_SPEED,
-]
-
 
 @asyncio.coroutine
 def async_get_engine(hass, config):
@@ -101,17 +94,11 @@ class YandexSpeechKitProvider(Provider):
         """Return list of supported languages."""
         return SUPPORT_LANGUAGES
 
-    @property
-    def supported_options(self):
-        """Return list of supported options."""
-        return SUPPORTED_OPTIONS
-
     @asyncio.coroutine
     def async_get_tts_audio(self, message, language, options=None):
         """Load TTS from yandex."""
         websession = async_get_clientsession(self.hass)
         actual_language = language
-        options = options or {}
 
         try:
             with async_timeout.timeout(10, loop=self.hass.loop):
@@ -119,10 +106,10 @@ class YandexSpeechKitProvider(Provider):
                     'text': message,
                     'lang': actual_language,
                     'key': self._key,
-                    'speaker': options.get(CONF_VOICE, self._speaker),
-                    'format': options.get(CONF_CODEC, self._codec),
-                    'emotion': options.get(CONF_EMOTION, self._emotion),
-                    'speed': options.get(CONF_SPEED, self._speed)
+                    'speaker': self._speaker,
+                    'format': self._codec,
+                    'emotion': self._emotion,
+                    'speed': self._speed
                 }
 
                 request = yield from websession.get(

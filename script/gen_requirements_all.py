@@ -29,60 +29,48 @@ COMMENT_REQUIREMENTS = (
     'blinkt',
     'smbus-cffi',
     'envirophat',
-    'i2csense',
-    'credstash',
-    'pytradfri',
+    'i2csense'
 )
 
 TEST_REQUIREMENTS = (
-    'aioautomatic',
-    'aiohttp_cors',
-    'apns2',
-    'coinmarketcap',
-    'defusedxml',
-    'dsmr_parser',
-    'ephem',
-    'evohomeclient',
-    'feedparser',
-    'fuzzywuzzy',
-    'gTTS-token',
-    'ha-ffmpeg',
-    'haversine',
-    'hbmqtt',
-    'holidays',
-    'home-assistant-frontend',
+    'pydispatch',
     'influxdb',
-    'libpurecoollink',
+    'nx584',
+    'uvcclient',
+    'somecomfort',
+    'aioautomatic',
+    'SoCo',
     'libsoundtouch',
-    'mficlient',
-    'numpy',
-    'paho-mqtt',
-    'pexpect',
+    'libpurecoollink',
+    'rxv',
+    'apns2',
+    'sqlalchemy',
+    'forecastio',
+    'aiohttp_cors',
     'pilight',
-    'pmsensor',
-    'prometheus_client',
-    'pydispatcher',
-    'PyJWT',
-    'pylitejet',
-    'pynx584',
-    'python-forecastio',
-    'pyunifi',
-    'pywebpush',
-    'restrictedpython',
+    'fuzzywuzzy',
     'rflink',
     'ring_doorbell',
-    'rxv',
     'sleepyq',
-    'SoCo',
-    'somecomfort',
-    'sqlalchemy',
     'statsd',
-    'uvcclient',
-    'warrant',
+    'pylitejet',
+    'holidays',
+    'evohomeclient',
+    'pexpect',
+    'hbmqtt',
+    'paho',
+    'dsmr_parser',
+    'mficlient',
+    'pmsensor',
     'yahoo-finance',
-    'pythonwhois',
-    'wakeonlan',
-    'vultr'
+    'ha-ffmpeg',
+    'gTTS-token',
+    'pywebpush',
+    'PyJWT',
+    'restrictedpython',
+    'pyunifi',
+    'prometheus_client',
+    'ephem'
 )
 
 IGNORE_PACKAGES = (
@@ -210,13 +198,11 @@ def requirements_test_output(reqs):
     output = []
     output.append('# Home Assistant test')
     output.append('\n')
-    with open('requirements_test.txt') as test_file:
-        output.append(test_file.read())
+    with open('requirements_test.txt') as fp:
+        output.append(fp.read())
     output.append('\n')
     filtered = {key: value for key, value in reqs.items()
-                if any(
-                    re.search(r'(^|#){}($|[=><])'.format(ign),
-                              key) is not None for ign in TEST_REQUIREMENTS)}
+                if any(ign in key for ign in TEST_REQUIREMENTS)}
     output.append(generate_requirements_list(filtered))
 
     return ''.join(output)

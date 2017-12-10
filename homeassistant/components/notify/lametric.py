@@ -13,57 +13,50 @@ from homeassistant.components.notify import (
 from homeassistant.const import CONF_ICON
 import homeassistant.helpers.config_validation as cv
 
-from homeassistant.components.lametric import DOMAIN as LAMETRIC_DOMAIN
+from homeassistant.components.lametric import DOMAIN
 
 REQUIREMENTS = ['lmnotify==0.0.4']
-DEPENDENCIES = ['lametric']
 
 _LOGGER = logging.getLogger(__name__)
 
-CONF_LIFETIME = "lifetime"
-CONF_CYCLES = "cycles"
+CONF_DISPLAY_TIME = "display_time"
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Optional(CONF_ICON, default="i555"): cv.string,
-    vol.Optional(CONF_LIFETIME, default=10): cv.positive_int,
-    vol.Optional(CONF_CYCLES, default=1): cv.positive_int,
+    vol.Optional(CONF_DISPLAY_TIME, default=10): cv.positive_int,
 })
 
 
 # pylint: disable=unused-variable
 def get_service(hass, config, discovery_info=None):
-    """Get the LaMetric notification service."""
-    hlmn = hass.data.get(LAMETRIC_DOMAIN)
+    """Get the Slack notification service."""
+    hlmn = hass.data.get(DOMAIN)
     return LaMetricNotificationService(hlmn,
                                        config[CONF_ICON],
-                                       config[CONF_LIFETIME] * 1000,
-                                       config[CONF_CYCLES])
+                                       config[CONF_DISPLAY_TIME] * 1000)
 
 
 class LaMetricNotificationService(BaseNotificationService):
     """Implement the notification service for LaMetric."""
 
-    def __init__(self, hasslametricmanager, icon, lifetime, cycles):
+    def __init__(self, hasslametricmanager, icon, display_time):
         """Initialize the service."""
         self.hasslametricmanager = hasslametricmanager
         self._icon = icon
-        self._lifetime = lifetime
-        self._cycles = cycles
+        self._display_time = display_time
 
     # pylint: disable=broad-except
     def send_message(self, message="", **kwargs):
-        """Send a message to some LaMetric device."""
+        """Send a message to some LaMetric deviced."""
         from lmnotify import SimpleFrame, Sound, Model
-        from oauthlib.oauth2 import TokenExpiredError
 
         targets = kwargs.get(ATTR_TARGET)
         data = kwargs.get(ATTR_DATA)
         _LOGGER.debug("Targets/Data: %s/%s", targets, data)
         icon = self._icon
-        cycles = self._cycles
         sound = None
 
-        # Additional data?
+        # User-defined icon?
         if data is not None:
             if "icon" in data:
                 icon = data["icon"]
@@ -78,21 +71,21 @@ class LaMetricNotificationService(BaseNotificationService):
                                   data["sound"])
 
         text_frame = SimpleFrame(icon, message)
-        _LOGGER.debug("Icon/Message/Cycles/Lifetime: %s, %s, %d, %d",
-                      icon, message, self._cycles, self._lifetime)
+        _LOGGER.debug("Icon/Message/Duration: %s, %s, %d",
+                      icon, message, self._display_time)
 
         frames = [text_frame]
 
-        model = Model(frames=frames, cycles=cycles, sound=sound)
-        lmn = self.hasslametricmanager.manager
-        try:
-            devices = lmn.get_devices()
-        except TokenExpiredError:
-            _LOGGER.debug("Token expired, fetching new token")
-            lmn.get_token()
-            devices = lmn.get_devices()
+        if sound is not None:
+            frames.append(sound)
+
+        _LOGGER.debug(frames)
+
+        model = Model(frames=frames)
+        lmn = self.hasslametricmanager.manager()
+        devices = lmn.get_devices()
         for dev in devices:
-            if targets is None or dev["name"] in targets:
+            if (targets is None) or (dev["name"] in targets):
                 lmn.set_device(dev)
-                lmn.send_notification(model, lifetime=self._lifetime)
+                lmn.send_notification(model, lifetime=self._display_time)
                 _LOGGER.debug("Sent notification to LaMetric %s", dev["name"])

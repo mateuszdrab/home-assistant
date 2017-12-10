@@ -10,11 +10,10 @@ import voluptuous as vol
 
 from homeassistant.components.notify import (
     ATTR_TITLE, ATTR_TITLE_DEFAULT, PLATFORM_SCHEMA, BaseNotificationService)
-from homeassistant.const import (
-    CONF_API_KEY, CONF_SENDER, CONF_RECIPIENT, CONTENT_TYPE_TEXT_PLAIN)
+from homeassistant.const import (CONF_API_KEY, CONF_SENDER, CONF_RECIPIENT)
 import homeassistant.helpers.config_validation as cv
 
-REQUIREMENTS = ['sendgrid==5.3.0']
+REQUIREMENTS = ['sendgrid==5.2.0']
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -68,7 +67,7 @@ class SendgridNotificationService(BaseNotificationService):
             },
             "content": [
                 {
-                    "type": CONTENT_TYPE_TEXT_PLAIN,
+                    "type": "text/plain",
                     "value": message
                 }
             ]

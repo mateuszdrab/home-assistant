@@ -26,12 +26,6 @@ def purge_old_data(instance, purge_days):
         _LOGGER.debug("Deleted %s events", deleted_rows)
 
     # Execute sqlite vacuum command to free up space on disk
-    _LOGGER.debug("DB engine driver: %s", instance.engine.driver)
-    if instance.engine.driver == 'pysqlite':
-        from sqlalchemy import exc
-
+    if instance.engine.driver == 'sqlite':
         _LOGGER.info("Vacuuming SQLite to free space")
-        try:
-            instance.engine.execute("VACUUM")
-        except exc.OperationalError as err:
-            _LOGGER.error("Error vacuuming SQLite: %s.", err)
+        instance.engine.execute("VACUUM")

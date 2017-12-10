@@ -132,12 +132,10 @@ class SonarrSensor(Entity):
                     show['seasonNumber'], show['episodeNumber'])
         elif self.type == 'queue':
             for show in self.data:
-                remaining = (1 if show['size'] == 0
-                             else show['sizeleft']/show['size'])
                 attributes[show['series']['title'] + ' S{:02d}E{:02d}'.format(
                     show['episode']['seasonNumber'],
                     show['episode']['episodeNumber']
-                )] = '{:.2f}%'.format(100*(1-(remaining)))
+                )] = '{:.2f}%'.format(100*(1-(show['sizeleft']/show['size'])))
         elif self.type == 'wanted':
             for show in self.data:
                 attributes[show['series']['title'] + ' S{:02d}E{:02d}'.format(

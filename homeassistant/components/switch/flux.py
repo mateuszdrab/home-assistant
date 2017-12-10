@@ -11,12 +11,9 @@ import logging
 
 import voluptuous as vol
 
-import homeassistant.helpers.config_validation as cv
-from homeassistant.components.light import (
-    is_on, turn_on, VALID_TRANSITION, ATTR_TRANSITION)
+from homeassistant.components.light import is_on, turn_on
 from homeassistant.components.switch import DOMAIN, SwitchDevice
-from homeassistant.const import (
-    CONF_NAME, CONF_PLATFORM, CONF_LIGHTS, CONF_MODE)
+from homeassistant.const import CONF_NAME, CONF_PLATFORM
 from homeassistant.helpers.event import track_time_change
 from homeassistant.helpers.sun import get_astral_event_date
 from homeassistant.util import slugify
@@ -24,9 +21,13 @@ from homeassistant.util.color import (
     color_temperature_to_rgb, color_RGB_to_xy,
     color_temperature_kelvin_to_mired)
 from homeassistant.util.dt import now as dt_now
+import homeassistant.helpers.config_validation as cv
+
+DEPENDENCIES = ['light']
 
 _LOGGER = logging.getLogger(__name__)
 
+CONF_LIGHTS = 'lights'
 CONF_START_TIME = 'start_time'
 CONF_STOP_TIME = 'stop_time'
 CONF_START_CT = 'start_colortemp'
@@ -34,14 +35,12 @@ CONF_SUNSET_CT = 'sunset_colortemp'
 CONF_STOP_CT = 'stop_colortemp'
 CONF_BRIGHTNESS = 'brightness'
 CONF_DISABLE_BRIGTNESS_ADJUST = 'disable_brightness_adjust'
-CONF_INTERVAL = 'interval'
+CONF_MODE = 'mode'
 
 MODE_XY = 'xy'
 MODE_MIRED = 'mired'
 MODE_RGB = 'rgb'
 DEFAULT_MODE = MODE_XY
-DEPENDENCIES = ['light']
-
 
 PLATFORM_SCHEMA = vol.Schema({
     vol.Required(CONF_PLATFORM): 'flux',
@@ -59,39 +58,37 @@ PLATFORM_SCHEMA = vol.Schema({
         vol.All(vol.Coerce(int), vol.Range(min=0, max=255)),
     vol.Optional(CONF_DISABLE_BRIGTNESS_ADJUST): cv.boolean,
     vol.Optional(CONF_MODE, default=DEFAULT_MODE):
-        vol.Any(MODE_XY, MODE_MIRED, MODE_RGB),
-    vol.Optional(CONF_INTERVAL, default=30): cv.positive_int,
-    vol.Optional(ATTR_TRANSITION, default=30): VALID_TRANSITION
+        vol.Any(MODE_XY, MODE_MIRED, MODE_RGB)
 })
 
 
-def set_lights_xy(hass, lights, x_val, y_val, brightness, transition):
+def set_lights_xy(hass, lights, x_val, y_val, brightness):
     """Set color of array of lights."""
     for light in lights:
         if is_on(hass, light):
             turn_on(hass, light,
                     xy_color=[x_val, y_val],
                     brightness=brightness,
-                    transition=transition)
+                    transition=30)
 
 
-def set_lights_temp(hass, lights, mired, brightness, transition):
+def set_lights_temp(hass, lights, mired, brightness):
     """Set color of array of lights."""
     for light in lights:
         if is_on(hass, light):
             turn_on(hass, light,
                     color_temp=int(mired),
                     brightness=brightness,
-                    transition=transition)
+                    transition=30)
 
 
-def set_lights_rgb(hass, lights, rgb, transition):
+def set_lights_rgb(hass, lights, rgb):
     """Set color of array of lights."""
     for light in lights:
         if is_on(hass, light):
             turn_on(hass, light,
                     rgb_color=rgb,
-                    transition=transition)
+                    transition=30)
 
 
 # pylint: disable=unused-argument
@@ -107,12 +104,9 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
     brightness = config.get(CONF_BRIGHTNESS)
     disable_brightness_adjust = config.get(CONF_DISABLE_BRIGTNESS_ADJUST)
     mode = config.get(CONF_MODE)
-    interval = config.get(CONF_INTERVAL)
-    transition = config.get(ATTR_TRANSITION)
-    flux = FluxSwitch(name, hass, lights, start_time, stop_time,
+    flux = FluxSwitch(name, hass, False, lights, start_time, stop_time,
                       start_colortemp, sunset_colortemp, stop_colortemp,
-                      brightness, disable_brightness_adjust, mode, interval,
-                      transition)
+                      brightness, disable_brightness_adjust, mode)
     add_devices([flux])
 
     def update(call=None):
@@ -126,10 +120,9 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
 class FluxSwitch(SwitchDevice):
     """Representation of a Flux switch."""
 
-    def __init__(self, name, hass, lights, start_time, stop_time,
+    def __init__(self, name, hass, state, lights, start_time, stop_time,
                  start_colortemp, sunset_colortemp, stop_colortemp,
-                 brightness, disable_brightness_adjust, mode, interval,
-                 transition):
+                 brightness, disable_brightness_adjust, mode):
         """Initialize the Flux switch."""
         self._name = name
         self.hass = hass
@@ -142,8 +135,6 @@ class FluxSwitch(SwitchDevice):
         self._brightness = brightness
         self._disable_brightness_adjust = disable_brightness_adjust
         self._mode = mode
-        self._interval = interval
-        self._transition = transition
         self.unsub_tracker = None
 
     @property
@@ -165,7 +156,7 @@ class FluxSwitch(SwitchDevice):
         self.flux_update()
 
         self.unsub_tracker = track_time_change(
-            self.hass, self.flux_update, second=[0, self._interval])
+            self.hass, self.flux_update, second=[0, 30])
 
         self.schedule_update_ha_state()
 
@@ -242,21 +233,20 @@ class FluxSwitch(SwitchDevice):
             brightness = None
         if self._mode == MODE_XY:
             set_lights_xy(self.hass, self._lights, x_val,
-                          y_val, brightness, self._transition)
+                          y_val, brightness)
             _LOGGER.info("Lights updated to x:%s y:%s brightness:%s, %s%% "
                          "of %s cycle complete at %s", x_val, y_val,
                          brightness, round(
                              percentage_complete * 100), time_state, now)
         elif self._mode == MODE_RGB:
-            set_lights_rgb(self.hass, self._lights, rgb, self._transition)
+            set_lights_rgb(self.hass, self._lights, rgb)
             _LOGGER.info("Lights updated to rgb:%s, %s%% "
                          "of %s cycle complete at %s", rgb,
                          round(percentage_complete * 100), time_state, now)
         else:
             # Convert to mired and clamp to allowed values
             mired = color_temperature_kelvin_to_mired(temp)
-            set_lights_temp(self.hass, self._lights, mired, brightness,
-                            self._transition)
+            set_lights_temp(self.hass, self._lights, mired, brightness)
             _LOGGER.info("Lights updated to mired:%s brightness:%s, %s%% "
                          "of %s cycle complete at %s", mired, brightness,
                          round(percentage_complete * 100), time_state, now)

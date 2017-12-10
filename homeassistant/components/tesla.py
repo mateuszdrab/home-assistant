@@ -5,7 +5,7 @@ For more details about this component, please refer to the documentation at
 https://home-assistant.io/components/tesla/
 """
 from collections import defaultdict
-import logging
+
 import voluptuous as vol
 
 from homeassistant.const import (
@@ -15,11 +15,9 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.entity import Entity
 from homeassistant.util import slugify
 
-REQUIREMENTS = ['teslajsonpy==0.0.18']
+REQUIREMENTS = ['teslajsonpy==0.0.11']
 
 DOMAIN = 'tesla'
-
-_LOGGER = logging.getLogger(__name__)
 
 TESLA_ID_FORMAT = '{}_{}'
 TESLA_ID_LIST_SCHEMA = vol.Schema([int])
@@ -33,17 +31,14 @@ CONFIG_SCHEMA = vol.Schema({
     }),
 }, extra=vol.ALLOW_EXTRA)
 
-NOTIFICATION_ID = 'tesla_integration_notification'
-NOTIFICATION_TITLE = 'Tesla integration setup'
-
 TESLA_COMPONENTS = [
-    'sensor', 'lock', 'climate', 'binary_sensor', 'device_tracker', 'switch'
+    'sensor', 'lock', 'climate', 'binary_sensor', 'device_tracker'
 ]
 
 
 def setup(hass, base_config):
     """Set up of Tesla platform."""
-    from teslajsonpy import Controller as teslaAPI, TeslaException
+    from teslajsonpy.controller import Controller as teslaApi
 
     config = base_config.get(DOMAIN)
 
@@ -51,31 +46,10 @@ def setup(hass, base_config):
     password = config.get(CONF_PASSWORD)
     update_interval = config.get(CONF_SCAN_INTERVAL)
     if hass.data.get(DOMAIN) is None:
-        try:
-            hass.data[DOMAIN] = {
-                'controller': teslaAPI(
-                    email, password, update_interval),
-                'devices': defaultdict(list)
-            }
-            _LOGGER.debug("Connected to the Tesla API.")
-        except TeslaException as ex:
-            if ex.code == 401:
-                hass.components.persistent_notification.create(
-                    "Error:<br />Please check username and password."
-                    "You will need to restart Home Assistant after fixing.",
-                    title=NOTIFICATION_TITLE,
-                    notification_id=NOTIFICATION_ID)
-            else:
-                hass.components.persistent_notification.create(
-                    "Error:<br />Can't communicate with Tesla API.<br />"
-                    "Error code: {} Reason: {}"
-                    "You will need to restart Home Assistant after fixing."
-                    "".format(ex.code, ex.message),
-                    title=NOTIFICATION_TITLE,
-                    notification_id=NOTIFICATION_ID)
-            _LOGGER.error("Unable to communicate with Tesla API: %s",
-                          ex.message)
-            return False
+        hass.data[DOMAIN] = {
+            'controller': teslaApi(email, password, update_interval),
+            'devices': defaultdict(list)
+        }
 
     all_devices = hass.data[DOMAIN]['controller'].list_vehicles()
 

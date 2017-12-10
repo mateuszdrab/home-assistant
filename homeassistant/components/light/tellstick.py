@@ -4,13 +4,15 @@ Support for Tellstick lights.
 For more details about this platform, please refer to the documentation at
 https://home-assistant.io/components/light.tellstick/
 """
+import voluptuous as vol
 
 from homeassistant.components.light import (
     ATTR_BRIGHTNESS, SUPPORT_BRIGHTNESS, Light)
 from homeassistant.components.tellstick import (
     DEFAULT_SIGNAL_REPETITIONS, ATTR_DISCOVER_DEVICES, ATTR_DISCOVER_CONFIG,
-    DATA_TELLSTICK, TellstickDevice)
+    DOMAIN, TellstickDevice)
 
+PLATFORM_SCHEMA = vol.Schema({vol.Required("platform"): DOMAIN})
 
 SUPPORT_TELLSTICK = SUPPORT_BRIGHTNESS
 
@@ -25,18 +27,17 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
     signal_repetitions = discovery_info.get(
         ATTR_DISCOVER_CONFIG, DEFAULT_SIGNAL_REPETITIONS)
 
-    add_devices([TellstickLight(hass.data[DATA_TELLSTICK][tellcore_id],
-                                signal_repetitions)
-                 for tellcore_id in discovery_info[ATTR_DISCOVER_DEVICES]],
-                True)
+    add_devices(TellstickLight(tellcore_id, hass.data['tellcore_registry'],
+                               signal_repetitions)
+                for tellcore_id in discovery_info[ATTR_DISCOVER_DEVICES])
 
 
 class TellstickLight(TellstickDevice, Light):
     """Representation of a Tellstick light."""
 
-    def __init__(self, tellcore_device, signal_repetitions):
+    def __init__(self, tellcore_id, tellcore_registry, signal_repetitions):
         """Initialize the Tellstick light."""
-        super().__init__(tellcore_device, signal_repetitions)
+        super().__init__(tellcore_id, tellcore_registry, signal_repetitions)
 
         self._brightness = 255
 
@@ -55,9 +56,10 @@ class TellstickLight(TellstickDevice, Light):
         return kwargs.get(ATTR_BRIGHTNESS)
 
     def _parse_tellcore_data(self, tellcore_data):
-        """Turn the value received from tellcore into something useful."""
-        if tellcore_data:
-            return int(tellcore_data)  # brightness
+        """Turn the value recieved from tellcore into something useful."""
+        if tellcore_data is not None:
+            brightness = int(tellcore_data)
+            return brightness
         return None
 
     def _update_model(self, new_state, data):

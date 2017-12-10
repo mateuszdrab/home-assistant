@@ -1,5 +1,6 @@
 """Implements a RainMachine sprinkler controller for Home Assistant."""
 
+import asyncio
 from datetime import timedelta
 from logging import getLogger
 
@@ -52,7 +53,8 @@ PLATFORM_SCHEMA = vol.Schema(
     extra=vol.ALLOW_EXTRA)
 
 
-def setup_platform(hass, config, add_devices, discovery_info=None):
+@asyncio.coroutine
+def async_setup_platform(hass, config, async_add_devices, discovery_info=None):
     """Set this component up under its platform."""
     import regenmaschine as rm
 
@@ -112,7 +114,7 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
                     zone_run_time,
                     device_name=rainmachine_device_name, ))
 
-        add_devices(entities)
+        async_add_devices(entities)
     except rm.exceptions.HTTPError as exc_info:
         _LOGGER.error('An HTTP error occurred while talking with RainMachine')
         _LOGGER.debug(exc_info)

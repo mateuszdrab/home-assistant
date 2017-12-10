@@ -10,16 +10,18 @@ import voluptuous as vol
 
 import homeassistant.helpers.config_validation as cv
 from homeassistant.components.sensor import PLATFORM_SCHEMA
-from homeassistant.const import CONF_NAME, CONF_API_KEY, CONF_ROOM
+from homeassistant.const import CONF_NAME, CONF_API_KEY
 from homeassistant.helpers.entity import Entity
 
-REQUIREMENTS = ['gitterpy==0.1.6']
+REQUIREMENTS = ['gitterpy==0.1.5']
 
 _LOGGER = logging.getLogger(__name__)
 
 ATTR_MENTION = 'mention'
 ATTR_ROOM = 'room'
 ATTR_USERNAME = 'username'
+
+CONF_ROOM = 'room'
 
 DEFAULT_NAME = 'Gitter messages'
 DEFAULT_ROOM = 'home-assistant/home-assistant'
@@ -97,8 +99,5 @@ class GitterSensor(Entity):
     def update(self):
         """Get the latest data and updates the state."""
         data = self._data.user.unread_items(self._room)
-        if 'error' not in data.keys():
-            self._mention = len(data['mention'])
-            self._state = len(data['chat'])
-        else:
-            _LOGGER.error("Not joined: %s", self._room)
+        self._mention = len(data['mention'])
+        self._state = len(data['chat'])

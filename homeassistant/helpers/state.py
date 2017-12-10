@@ -4,7 +4,6 @@ import json
 import logging
 from collections import defaultdict
 
-from homeassistant.loader import bind_hass
 import homeassistant.util.dt as dt_util
 from homeassistant.components.media_player import (
     ATTR_MEDIA_CONTENT_ID, ATTR_MEDIA_CONTENT_TYPE, ATTR_MEDIA_SEEK_POSITION,
@@ -121,7 +120,6 @@ def get_changed_since(states, utc_point_in_time):
             if state.last_updated >= utc_point_in_time]
 
 
-@bind_hass
 def reproduce_state(hass, states, blocking=False):
     """Reproduce given state."""
     return run_coroutine_threadsafe(
@@ -129,7 +127,6 @@ def reproduce_state(hass, states, blocking=False):
 
 
 @asyncio.coroutine
-@bind_hass
 def async_reproduce_state(hass, states, blocking=False):
     """Reproduce given state."""
     if isinstance(states, State):

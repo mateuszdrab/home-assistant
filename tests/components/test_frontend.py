@@ -7,8 +7,7 @@ import pytest
 
 from homeassistant.setup import async_setup_component
 from homeassistant.components.frontend import (
-    DOMAIN, CONF_JS_VERSION, CONF_THEMES, CONF_EXTRA_HTML_URL,
-    CONF_EXTRA_HTML_URL_ES5, DATA_PANELS)
+    DOMAIN, ATTR_THEMES, ATTR_EXTRA_HTML_URL, DATA_PANELS, register_panel)
 
 
 @pytest.fixture
@@ -23,7 +22,7 @@ def mock_http_client_with_themes(hass, test_client):
     """Start the Hass HTTP component."""
     hass.loop.run_until_complete(async_setup_component(hass, 'frontend', {
         DOMAIN: {
-            CONF_THEMES: {
+            ATTR_THEMES: {
                 'happy': {
                     'primary-color': 'red'
                 }
@@ -37,10 +36,7 @@ def mock_http_client_with_urls(hass, test_client):
     """Start the Hass HTTP component."""
     hass.loop.run_until_complete(async_setup_component(hass, 'frontend', {
         DOMAIN: {
-            CONF_JS_VERSION: 'auto',
-            CONF_EXTRA_HTML_URL: ["https://domain.com/my_extra_url.html"],
-            CONF_EXTRA_HTML_URL_ES5:
-                ["https://domain.com/my_extra_url_es5.html"]
+            ATTR_EXTRA_HTML_URL: ["https://domain.com/my_extra_url.html"]
         }}))
     return hass.loop.run_until_complete(test_client(hass.http.app))
 
@@ -56,7 +52,7 @@ def test_frontend_and_static(mock_http_client):
 
     # Test we can retrieve frontend.js
     frontendjs = re.search(
-        r'(?P<app>\/frontend_es5\/frontend-[A-Za-z0-9]{32}.html)', text)
+        r'(?P<app>\/static\/frontend-[A-Za-z0-9]{32}.html)', text)
 
     assert frontendjs is not None
     resp = yield from mock_http_client.get(frontendjs.groups(0)[0])
@@ -67,10 +63,6 @@ def test_frontend_and_static(mock_http_client):
 @asyncio.coroutine
 def test_dont_cache_service_worker(mock_http_client):
     """Test that we don't cache the service worker."""
-    resp = yield from mock_http_client.get('/service_worker_es5.js')
-    assert resp.status == 200
-    assert 'cache-control' not in resp.headers
-
     resp = yield from mock_http_client.get('/service_worker.js')
     assert resp.status == 200
     assert 'cache-control' not in resp.headers
@@ -141,7 +133,7 @@ def test_themes_reload_themes(hass, mock_http_client_with_themes):
     """Test frontend.reload_themes service."""
     with patch('homeassistant.components.frontend.load_yaml_config_file',
                return_value={DOMAIN: {
-                   CONF_THEMES: {
+                   ATTR_THEMES: {
                        'sad': {'primary-color': 'blue'}
                    }}}):
         yield from hass.services.async_call(DOMAIN, 'set_theme',
@@ -167,25 +159,24 @@ def test_missing_themes(mock_http_client):
 @asyncio.coroutine
 def test_extra_urls(mock_http_client_with_urls):
     """Test that extra urls are loaded."""
-    resp = yield from mock_http_client_with_urls.get('/states?latest')
+    resp = yield from mock_http_client_with_urls.get('/states')
     assert resp.status == 200
     text = yield from resp.text()
-    assert text.find('href="https://domain.com/my_extra_url.html"') >= 0
-
-
-@asyncio.coroutine
-def test_extra_urls_es5(mock_http_client_with_urls):
-    """Test that es5 extra urls are loaded."""
-    resp = yield from mock_http_client_with_urls.get('/states?es5')
-    assert resp.status == 200
-    text = yield from resp.text()
-    assert text.find('href="https://domain.com/my_extra_url_es5.html"') >= 0
+    assert text.find('href=\'https://domain.com/my_extra_url.html\'') >= 0
 
 
 @asyncio.coroutine
 def test_panel_without_path(hass):
     """Test panel registration without file path."""
-    yield from hass.components.frontend.async_register_panel(
-        'test_component', 'nonexistant_file')
-    yield from async_setup_component(hass, 'frontend', {})
-    assert 'test_component' not in hass.data[DATA_PANELS]
+    register_panel(hass, 'test_component', 'nonexistant_file')
+    assert hass.data[DATA_PANELS] == {}
+
+
+@asyncio.coroutine
+def test_panel_with_url(hass):
+    """Test panel registration without file path."""
+    register_panel(hass, 'test_component', None, url='some_url')
+    assert hass.data[DATA_PANELS] == {
+        'test_component': {'component_name': 'test_component',
+                           'url': 'some_url',
+                           'url_path': 'test_component'}}

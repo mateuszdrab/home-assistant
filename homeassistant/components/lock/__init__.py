@@ -90,16 +90,24 @@ def async_setup(hass, config):
 
         code = service.data.get(ATTR_CODE)
 
-        update_tasks = []
         for entity in target_locks:
             if service.service == SERVICE_LOCK:
                 yield from entity.async_lock(code=code)
             else:
                 yield from entity.async_unlock(code=code)
 
+        update_tasks = []
+
+        for entity in target_locks:
             if not entity.should_poll:
                 continue
-            update_tasks.append(entity.async_update_ha_state(True))
+
+            update_coro = hass.async_add_job(
+                entity.async_update_ha_state(True))
+            if hasattr(entity, 'async_update'):
+                update_tasks.append(update_coro)
+            else:
+                yield from update_coro
 
         if update_tasks:
             yield from asyncio.wait(update_tasks, loop=hass.loop)

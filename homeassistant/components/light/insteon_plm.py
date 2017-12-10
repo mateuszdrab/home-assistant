@@ -60,12 +60,12 @@ class InsteonPLMDimmerDevice(Light):
 
     @property
     def address(self):
-        """Return the address of the node."""
+        """Return the the address of the node."""
         return self._address
 
     @property
     def name(self):
-        """Return the name of the node."""
+        """Return the the name of the node."""
         return self._name
 
     @property

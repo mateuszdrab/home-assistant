@@ -18,10 +18,10 @@ from homeassistant.const import (
     CONF_PLATFORM, CONF_HOSTS, CONF_NAME, ATTR_ENTITY_ID)
 from homeassistant.helpers import discovery
 from homeassistant.helpers.entity import Entity
-from homeassistant.helpers.event import track_time_interval
+from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.config import load_yaml_config_file
 
-REQUIREMENTS = ['pyhomematic==0.1.35']
+REQUIREMENTS = ['pyhomematic==0.1.30']
 
 DOMAIN = 'homematic'
 
@@ -56,7 +56,7 @@ SERVICE_SET_DEV_VALUE = 'set_dev_value'
 
 HM_DEVICE_TYPES = {
     DISCOVER_SWITCHES: [
-        'Switch', 'SwitchPowermeter', 'IOSwitch', 'IPSwitch', 'RFSiren',
+        'Switch', 'SwitchPowermeter', 'IOSwitch', 'IPSwitch',
         'IPSwitchPowermeter', 'KeyMatic', 'HMWIOSwitch', 'Rain', 'EcoLogic'],
     DISCOVER_LIGHTS: ['Dimmer', 'KeyDimmer', 'IPKeyDimmer'],
     DISCOVER_SENSORS: [
@@ -65,17 +65,14 @@ HM_DEVICE_TYPES = {
         'WaterSensor', 'PowermeterGas', 'LuxSensor', 'WeatherSensor',
         'WeatherStation', 'ThermostatWall2', 'TemperatureDiffSensor',
         'TemperatureSensor', 'CO2Sensor', 'IPSwitchPowermeter', 'HMWIOSwitch',
-        'FillingLevel', 'ValveDrive', 'EcoLogic', 'IPThermostatWall',
-        'IPSmoke', 'RFSiren', 'PresenceIP'],
+        'FillingLevel', 'ValveDrive', 'EcoLogic'],
     DISCOVER_CLIMATE: [
         'Thermostat', 'ThermostatWall', 'MAXThermostat', 'ThermostatWall2',
-        'MAXWallThermostat', 'IPThermostat', 'IPThermostatWall',
-        'ThermostatGroup'],
+        'MAXWallThermostat', 'IPThermostat', 'IPThermostatWall'],
     DISCOVER_BINARY_SENSORS: [
         'ShutterContact', 'Smoke', 'SmokeV2', 'Motion', 'MotionV2',
         'RemoteMotion', 'WeatherSensor', 'TiltSensor', 'IPShutterContact',
-        'HMWIOSwitch', 'MaxShutterContact', 'Rain', 'WiredSensor',
-        'PresenceIP'],
+        'HMWIOSwitch', 'MaxShutterContact', 'Rain', 'WiredSensor'],
     DISCOVER_COVER: ['Blind', 'KeyBlind']
 }
 
@@ -131,7 +128,6 @@ CONF_LOCAL_IP = 'local_ip'
 CONF_LOCAL_PORT = 'local_port'
 CONF_IP = 'ip'
 CONF_PORT = 'port'
-CONF_PATH = 'path'
 CONF_CALLBACK_IP = 'callback_ip'
 CONF_CALLBACK_PORT = 'callback_port'
 CONF_RESOLVENAMES = 'resolvenames'
@@ -143,7 +139,6 @@ DEFAULT_LOCAL_IP = '0.0.0.0'
 DEFAULT_LOCAL_PORT = 0
 DEFAULT_RESOLVENAMES = False
 DEFAULT_PORT = 2001
-DEFAULT_PATH = ''
 DEFAULT_USERNAME = 'Admin'
 DEFAULT_PASSWORD = ''
 DEFAULT_VARIABLES = False
@@ -164,8 +159,8 @@ CONFIG_SCHEMA = vol.Schema({
     DOMAIN: vol.Schema({
         vol.Required(CONF_HOSTS): {cv.match_all: {
             vol.Required(CONF_IP): cv.string,
-            vol.Optional(CONF_PORT, default=DEFAULT_PORT): cv.port,
-            vol.Optional(CONF_PATH, default=DEFAULT_PATH): cv.string,
+            vol.Optional(CONF_PORT, default=DEFAULT_PORT):
+                cv.port,
             vol.Optional(CONF_USERNAME, default=DEFAULT_USERNAME): cv.string,
             vol.Optional(CONF_PASSWORD, default=DEFAULT_PASSWORD): cv.string,
             vol.Optional(CONF_VARIABLES, default=DEFAULT_VARIABLES):
@@ -262,7 +257,6 @@ def setup(hass, config):
         remotes[rname] = {}
         remotes[rname][CONF_IP] = server
         remotes[rname][CONF_PORT] = rconfig.get(CONF_PORT)
-        remotes[rname][CONF_PATH] = rconfig.get(CONF_PATH)
         remotes[rname][CONF_RESOLVENAMES] = rconfig.get(CONF_RESOLVENAMES)
         remotes[rname][CONF_USERNAME] = rconfig.get(CONF_USERNAME)
         remotes[rname][CONF_PASSWORD] = rconfig.get(CONF_PASSWORD)
@@ -297,7 +291,7 @@ def setup(hass, config):
     entity_hubs = []
     for _, hub_data in hosts.items():
         entity_hubs.append(HMHub(
-            hass, homematic, hub_data[CONF_NAME], hub_data[CONF_VARIABLES]))
+            homematic, hub_data[CONF_NAME], hub_data[CONF_VARIABLES]))
 
     # Register HomeMatic services
     descriptions = load_yaml_config_file(
@@ -576,9 +570,8 @@ def _device_from_servicecall(hass, service):
 class HMHub(Entity):
     """The HomeMatic hub. (CCU2/HomeGear)."""
 
-    def __init__(self, hass, homematic, name, use_variables):
+    def __init__(self, homematic, name, use_variables):
         """Initialize HomeMatic hub."""
-        self.hass = hass
         self.entity_id = "{}.{}".format(DOMAIN, name.lower())
         self._homematic = homematic
         self._variables = {}
@@ -586,15 +579,18 @@ class HMHub(Entity):
         self._state = STATE_UNKNOWN
         self._use_variables = use_variables
 
+    @asyncio.coroutine
+    def async_added_to_hass(self):
+        """Load data init callbacks."""
         # Load data
-        track_time_interval(
+        async_track_time_interval(
             self.hass, self._update_hub, SCAN_INTERVAL_HUB)
-        self.hass.add_job(self._update_hub, None)
+        yield from self.hass.async_add_job(self._update_hub, None)
 
         if self._use_variables:
-            track_time_interval(
+            async_track_time_interval(
                 self.hass, self._update_variables, SCAN_INTERVAL_VARIABLES)
-            self.hass.add_job(self._update_variables, None)
+            yield from self.hass.async_add_job(self._update_variables, None)
 
     @property
     def name(self):
@@ -624,12 +620,10 @@ class HMHub(Entity):
 
     def _update_hub(self, now):
         """Retrieve latest state."""
-        service_message = self._homematic.getServiceMessages(self._name)
-        state = None if service_message is None else len(service_message)
+        state = self._homematic.getServiceMessages(self._name)
+        self._state = STATE_UNKNOWN if state is None else len(state)
 
-        # state have change?
-        if self._state != state:
-            self._state = state
+        if now:
             self.schedule_update_ha_state()
 
     def _update_variables(self, now):
@@ -646,7 +640,7 @@ class HMHub(Entity):
             state_change = True
             self._variables.update({key: value})
 
-        if state_change:
+        if state_change and now:
             self.schedule_update_ha_state()
 
     def hm_set_variable(self, name, value):

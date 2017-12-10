@@ -14,9 +14,8 @@ import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers import discovery
 from homeassistant.const import CONF_API_KEY
 from homeassistant.util import Throttle
-from homeassistant.util.json import save_json
 
-REQUIREMENTS = ['python-ecobee-api==0.0.12']
+REQUIREMENTS = ['python-ecobee-api==0.0.9']
 
 _CONFIGURING = {}
 _LOGGER = logging.getLogger(__name__)
@@ -82,7 +81,6 @@ def setup_ecobee(hass, network, config):
         hass, 'climate', DOMAIN, {'hold_temp': hold_temp}, config)
     discovery.load_platform(hass, 'sensor', DOMAIN, {}, config)
     discovery.load_platform(hass, 'binary_sensor', DOMAIN, {}, config)
-    discovery.load_platform(hass, 'weather', DOMAIN, {}, config)
 
 
 class EcobeeData(object):
@@ -112,10 +110,12 @@ def setup(hass, config):
     if 'ecobee' in _CONFIGURING:
         return
 
+    from pyecobee import config_from_file
+
     # Create ecobee.conf if it doesn't exist
     if not os.path.isfile(hass.config.path(ECOBEE_CONFIG_FILE)):
         jsonconfig = {"API_KEY": config[DOMAIN].get(CONF_API_KEY)}
-        save_json(hass.config.path(ECOBEE_CONFIG_FILE), jsonconfig)
+        config_from_file(hass.config.path(ECOBEE_CONFIG_FILE), jsonconfig)
 
     NETWORK = EcobeeData(hass.config.path(ECOBEE_CONFIG_FILE))
 

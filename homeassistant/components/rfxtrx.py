@@ -5,7 +5,6 @@ For more details about this component, please refer to the documentation at
 https://home-assistant.io/components/rfxtrx/
 """
 
-import asyncio
 import logging
 from collections import OrderedDict
 import voluptuous as vol
@@ -245,13 +244,15 @@ def get_pt2262_cmd(device_id, data_bits):
 def get_pt2262_device(device_id):
     """Look for the device which id matches the given device_id parameter."""
     for dev_id, device in RFX_DEVICES.items():
-        if (hasattr(device, 'is_lighting4') and
-                device.masked_id == get_pt2262_deviceid(device_id,
-                                                        device.data_bits)):
-            _LOGGER.info("rfxtrx: found matching device %s for %s",
-                         device_id,
-                         device.masked_id)
-            return device
+        try:
+            if device.masked_id == get_pt2262_deviceid(device_id,
+                                                       device.data_bits):
+                _LOGGER.info("rfxtrx: found matching device %s for %s",
+                             device_id,
+                             get_pt2262_deviceid(device_id, device.data_bits))
+                return device
+        except AttributeError:
+            continue
     return None
 
 
@@ -259,7 +260,7 @@ def get_pt2262_device(device_id):
 def find_possible_pt2262_device(device_id):
     """Look for the device which id matches the given device_id parameter."""
     for dev_id, device in RFX_DEVICES.items():
-        if hasattr(device, 'is_lighting4') and len(dev_id) == len(device_id):
+        if len(dev_id) == len(device_id):
             size = None
             for i in range(0, len(dev_id)):
                 if dev_id[i] != device_id[i]:
@@ -394,12 +395,6 @@ class RfxtrxDevice(Entity):
         self._state = datas[ATTR_STATE]
         self._should_fire_event = datas[ATTR_FIREEVENT]
         self._brightness = 0
-        self.added_to_hass = False
-
-    @asyncio.coroutine
-    def async_added_to_hass(self):
-        """Subscribe RFXtrx events."""
-        self.added_to_hass = True
 
     @property
     def should_poll(self):
@@ -434,8 +429,7 @@ class RfxtrxDevice(Entity):
         """Update det state of the device."""
         self._state = state
         self._brightness = brightness
-        if self.added_to_hass:
-            self.schedule_update_ha_state()
+        self.schedule_update_ha_state()
 
     def _send_command(self, command, brightness=0):
         if not self._event:
@@ -475,5 +469,4 @@ class RfxtrxDevice(Entity):
                 self._event.device.send_stop(self.hass.data[RFXOBJECT]
                                              .transport)
 
-        if self.added_to_hass:
-            self.schedule_update_ha_state()
+        self.schedule_update_ha_state()

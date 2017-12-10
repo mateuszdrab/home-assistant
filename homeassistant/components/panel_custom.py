@@ -4,13 +4,13 @@ Register a custom front end panel.
 For more details about this component, please refer to the documentation at
 https://home-assistant.io/components/panel_custom/
 """
-import asyncio
 import logging
 import os
 
 import voluptuous as vol
 
 import homeassistant.helpers.config_validation as cv
+from homeassistant.components.frontend import register_panel
 
 DOMAIN = 'panel_custom'
 DEPENDENCIES = ['frontend']
@@ -40,8 +40,7 @@ CONFIG_SCHEMA = vol.Schema({
 _LOGGER = logging.getLogger(__name__)
 
 
-@asyncio.coroutine
-def async_setup(hass, config):
+def setup(hass, config):
     """Initialize custom panel."""
     success = False
 
@@ -57,11 +56,11 @@ def async_setup(hass, config):
                           name, panel_path)
             continue
 
-        yield from hass.components.frontend.async_register_panel(
-            name, panel_path,
+        register_panel(
+            hass, name, panel_path,
             sidebar_title=panel.get(CONF_SIDEBAR_TITLE),
             sidebar_icon=panel.get(CONF_SIDEBAR_ICON),
-            frontend_url_path=panel.get(CONF_URL_PATH),
+            url_path=panel.get(CONF_URL_PATH),
             config=panel.get(CONF_CONFIG),
         )
 

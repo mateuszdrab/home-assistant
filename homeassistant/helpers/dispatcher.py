@@ -2,7 +2,6 @@
 import logging
 
 from homeassistant.core import callback
-from homeassistant.loader import bind_hass
 from homeassistant.util.async import run_callback_threadsafe
 
 
@@ -10,7 +9,6 @@ _LOGGER = logging.getLogger(__name__)
 DATA_DISPATCHER = 'dispatcher'
 
 
-@bind_hass
 def dispatcher_connect(hass, signal, target):
     """Connect a callable function to a signal."""
     async_unsub = run_callback_threadsafe(
@@ -24,7 +22,6 @@ def dispatcher_connect(hass, signal, target):
 
 
 @callback
-@bind_hass
 def async_dispatcher_connect(hass, signal, target):
     """Connect a callable function to a signal.
 
@@ -52,14 +49,12 @@ def async_dispatcher_connect(hass, signal, target):
     return async_remove_dispatcher
 
 
-@bind_hass
 def dispatcher_send(hass, signal, *args):
     """Send signal and data."""
     hass.loop.call_soon_threadsafe(async_dispatcher_send, hass, signal, *args)
 
 
 @callback
-@bind_hass
 def async_dispatcher_send(hass, signal, *args):
     """Send signal and data.
 

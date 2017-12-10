@@ -15,7 +15,7 @@ from homeassistant.helpers import (config_validation as cv, discovery)
 from homeassistant.util import Throttle
 from homeassistant.util.dt import now
 
-REQUIREMENTS = ['myusps==1.2.2']
+REQUIREMENTS = ['myusps==1.1.3']
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,7 +23,6 @@ DOMAIN = 'usps'
 DATA_USPS = 'data_usps'
 MIN_TIME_BETWEEN_UPDATES = timedelta(minutes=30)
 COOKIE = 'usps_cookies.pickle'
-CACHE = 'usps_cache'
 
 USPS_TYPE = ['sensor', 'camera']
 
@@ -46,9 +45,7 @@ def setup(hass, config):
     import myusps
     try:
         cookie = hass.config.path(COOKIE)
-        cache = hass.config.path(CACHE)
-        session = myusps.get_session(username, password,
-                                     cookie_path=cookie, cache_path=cache)
+        session = myusps.get_session(username, password, cookie_path=cookie)
     except myusps.USPSError:
         _LOGGER.exception('Could not connect to My USPS')
         return False

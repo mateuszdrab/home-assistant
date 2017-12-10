@@ -5,6 +5,7 @@ For more details about this platform, please refer to the documentation at
 https://home-assistant.io/components/sensor.fitbit/
 """
 import os
+import json
 import logging
 import datetime
 import time
@@ -16,10 +17,8 @@ from homeassistant.components.http import HomeAssistantView
 from homeassistant.components.sensor import PLATFORM_SCHEMA
 from homeassistant.const import ATTR_ATTRIBUTION
 from homeassistant.helpers.entity import Entity
-from homeassistant.helpers.icon import icon_for_battery_level
+from homeassistant.util.icon import icon_for_battery_level
 import homeassistant.helpers.config_validation as cv
-from homeassistant.util.json import load_json, save_json
-
 
 REQUIREMENTS = ['fitbit==0.3.0']
 
@@ -38,8 +37,8 @@ CONF_ATTRIBUTION = 'Data provided by Fitbit.com'
 
 DEPENDENCIES = ['http']
 
-FITBIT_AUTH_CALLBACK_PATH = '/api/fitbit/callback'
-FITBIT_AUTH_START = '/api/fitbit'
+FITBIT_AUTH_CALLBACK_PATH = '/auth/fitbit/callback'
+FITBIT_AUTH_START = '/auth/fitbit'
 FITBIT_CONFIG_FILE = 'fitbit.conf'
 FITBIT_DEFAULT_RESOURCES = ['activities/steps']
 
@@ -148,6 +147,31 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
 })
 
 
+def config_from_file(filename, config=None):
+    """Small configuration file management function."""
+    if config:
+        # We"re writing configuration
+        try:
+            with open(filename, 'w') as fdesc:
+                fdesc.write(json.dumps(config))
+        except IOError as error:
+            _LOGGER.error("Saving config file failed: %s", error)
+            return False
+        return config
+    else:
+        # We"re reading config
+        if os.path.isfile(filename):
+            try:
+                with open(filename, 'r') as fdesc:
+                    return json.loads(fdesc.read())
+            except IOError as error:
+                _LOGGER.error("Reading config file failed: %s", error)
+                # This won"t work yet
+                return False
+        else:
+            return {}
+
+
 def request_app_setup(hass, config, add_devices, config_path,
                       discovery_info=None):
     """Assist user with configuring the Fitbit dev application."""
@@ -158,7 +182,7 @@ def request_app_setup(hass, config, add_devices, config_path,
         """Handle configuration updates."""
         config_path = hass.config.path(FITBIT_CONFIG_FILE)
         if os.path.isfile(config_path):
-            config_file = load_json(config_path)
+            config_file = config_from_file(config_path)
             if config_file == DEFAULT_CONFIG:
                 error_msg = ("You didn't correctly modify fitbit.conf",
                              " please try again")
@@ -218,13 +242,13 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
     """Set up the Fitbit sensor."""
     config_path = hass.config.path(FITBIT_CONFIG_FILE)
     if os.path.isfile(config_path):
-        config_file = load_json(config_path)
+        config_file = config_from_file(config_path)
         if config_file == DEFAULT_CONFIG:
             request_app_setup(
                 hass, config, add_devices, config_path, discovery_info=None)
             return False
     else:
-        config_file = save_json(config_path, DEFAULT_CONFIG)
+        config_file = config_from_file(config_path, DEFAULT_CONFIG)
         request_app_setup(
             hass, config, add_devices, config_path, discovery_info=None)
         return False
@@ -296,8 +320,8 @@ class FitbitAuthCallbackView(HomeAssistantView):
     """Handle OAuth finish callback requests."""
 
     requires_auth = False
-    url = FITBIT_AUTH_CALLBACK_PATH
-    name = 'api:fitbit:callback'
+    url = '/auth/fitbit/callback'
+    name = 'auth:fitbit:callback'
 
     def __init__(self, config, add_devices, oauth):
         """Initialize the OAuth callback view."""
@@ -357,10 +381,11 @@ class FitbitAuthCallbackView(HomeAssistantView):
                 ATTR_ACCESS_TOKEN: result.get('access_token'),
                 ATTR_REFRESH_TOKEN: result.get('refresh_token'),
                 ATTR_CLIENT_ID: self.oauth.client_id,
-                ATTR_CLIENT_SECRET: self.oauth.client_secret,
-                ATTR_LAST_SAVED_AT: int(time.time())
+                ATTR_CLIENT_SECRET: self.oauth.client_secret
             }
-        save_json(hass.config.path(FITBIT_CONFIG_FILE), config_contents)
+        if not config_from_file(hass.config.path(FITBIT_CONFIG_FILE),
+                                config_contents):
+            _LOGGER.error("Failed to save config file")
 
         hass.async_add_job(setup_platform, hass, self.config, self.add_devices)
 
@@ -487,4 +512,5 @@ class FitbitSensor(Entity):
             ATTR_CLIENT_SECRET: self.client.client.client_secret,
             ATTR_LAST_SAVED_AT: int(time.time())
         }
-        save_json(self.config_path, config_contents)
+        if not config_from_file(self.config_path, config_contents):
+            _LOGGER.error("Failed to save config file")

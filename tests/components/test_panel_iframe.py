@@ -33,8 +33,8 @@ class TestPanelIframe(unittest.TestCase):
                     'panel_iframe': conf
                 })
 
-    @patch.dict('hass_frontend_es5.FINGERPRINTS',
-                {'iframe': 'md5md5'})
+    @patch.dict('homeassistant.components.frontend.FINGERPRINTS', {
+        'panels/ha-panel-iframe.html': 'md5md5'})
     def test_correct_config(self):
         """Test correct config."""
         assert setup.setup_component(
@@ -53,22 +53,20 @@ class TestPanelIframe(unittest.TestCase):
                 },
             })
 
-        panels = self.hass.data[frontend.DATA_PANELS]
-
-        assert panels.get('router').to_response(self.hass, None) == {
+        assert self.hass.data[frontend.DATA_PANELS].get('router') == {
             'component_name': 'iframe',
             'config': {'url': 'http://192.168.1.1'},
             'icon': 'mdi:network-wireless',
             'title': 'Router',
-            'url': '/frontend_es5/panels/ha-panel-iframe-md5md5.html',
+            'url': '/frontend/panels/iframe-md5md5.html',
             'url_path': 'router'
         }
 
-        assert panels.get('weather').to_response(self.hass, None) == {
+        assert self.hass.data[frontend.DATA_PANELS].get('weather') == {
             'component_name': 'iframe',
             'config': {'url': 'https://www.wunderground.com/us/ca/san-diego'},
             'icon': 'mdi:weather',
             'title': 'Weather',
-            'url': '/frontend_es5/panels/ha-panel-iframe-md5md5.html',
+            'url': '/frontend/panels/iframe-md5md5.html',
             'url_path': 'weather',
         }

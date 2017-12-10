@@ -11,17 +11,18 @@ import time
 import voluptuous as vol
 
 from homeassistant.components.switch import (SwitchDevice, PLATFORM_SCHEMA)
-from homeassistant.const import (CONF_HOST, CONF_NAME, ATTR_VOLTAGE)
+from homeassistant.const import (CONF_HOST, CONF_NAME)
 import homeassistant.helpers.config_validation as cv
 
-REQUIREMENTS = ['pyHS100==0.3.0']
+REQUIREMENTS = ['pyHS100==0.2.4.2']
 
 _LOGGER = logging.getLogger(__name__)
 
-ATTR_CURRENT_CONSUMPTION = 'current_consumption'
-ATTR_TOTAL_CONSUMPTION = 'total_consumption'
-ATTR_DAILY_CONSUMPTION = 'daily_consumption'
-ATTR_CURRENT = 'current'
+ATTR_CURRENT_CONSUMPTION = 'Current consumption'
+ATTR_TOTAL_CONSUMPTION = 'Total consumption'
+ATTR_DAILY_CONSUMPTION = 'Daily consumption'
+ATTR_VOLTAGE = 'Voltage'
+ATTR_CURRENT = 'Current'
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Required(CONF_HOST): cv.string,
@@ -45,8 +46,15 @@ class SmartPlugSwitch(SwitchDevice):
     def __init__(self, smartplug, name):
         """Initialize the switch."""
         self.smartplug = smartplug
-        self._name = name
+
+        # Use the name set on the device if not set
+        if name is None:
+            self._name = self.smartplug.alias
+        else:
+            self._name = name
+
         self._state = None
+        _LOGGER.debug("Setting up TP-Link Smart Plug")
         # Set up emeter cache
         self._emeter_params = {}
 
@@ -75,13 +83,10 @@ class SmartPlugSwitch(SwitchDevice):
 
     def update(self):
         """Update the TP-Link switch's state."""
-        from pyHS100 import SmartDeviceException
+        from pyHS100 import SmartPlugException
         try:
             self._state = self.smartplug.state == \
                 self.smartplug.SWITCH_STATE_ON
-
-            if self._name is None:
-                self._name = self.smartplug.alias
 
             if self.smartplug.has_emeter:
                 emeter_readings = self.smartplug.get_emeter_realtime()
@@ -103,5 +108,5 @@ class SmartPlugSwitch(SwitchDevice):
                     # device returned no daily history
                     pass
 
-        except (SmartDeviceException, OSError) as ex:
+        except (SmartPlugException, OSError) as ex:
             _LOGGER.warning('Could not read state for %s: %s', self.name, ex)

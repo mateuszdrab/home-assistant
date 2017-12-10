@@ -20,12 +20,11 @@ def setup_scanner(hass, config, see, discovery_info=None):
         return
 
     vin, _ = discovery_info
-    voc = hass.data[DATA_KEY]
-    vehicle = voc.vehicles[vin]
+    vehicle = hass.data[DATA_KEY].vehicles[vin]
 
     def see_vehicle(vehicle):
         """Handle the reporting of the vehicle position."""
-        host_name = voc.vehicle_name(vehicle)
+        host_name = vehicle.registration_number
         dev_id = 'volvo_{}'.format(slugify(host_name))
         see(dev_id=dev_id,
             host_name=host_name,

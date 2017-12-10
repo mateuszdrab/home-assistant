@@ -12,28 +12,26 @@ import voluptuous as vol
 
 import homeassistant.helpers.config_validation as cv
 from homeassistant.components.sensor import PLATFORM_SCHEMA
-from homeassistant.const import (
-    ATTR_ATTRIBUTION, CONF_CURRENCY, CONF_DISPLAY_CURRENCY)
+from homeassistant.const import ATTR_ATTRIBUTION, CONF_CURRENCY
 from homeassistant.helpers.entity import Entity
 
-REQUIREMENTS = ['coinmarketcap==4.1.1']
+REQUIREMENTS = ['coinmarketcap==3.0.1']
 
 _LOGGER = logging.getLogger(__name__)
 
-ATTR_24H_VOLUME = '24h_volume'
+ATTR_24H_VOLUME_USD = '24h_volume_usd'
 ATTR_AVAILABLE_SUPPLY = 'available_supply'
-ATTR_MARKET_CAP = 'market_cap'
+ATTR_MARKET_CAP = 'market_cap_usd'
 ATTR_NAME = 'name'
 ATTR_PERCENT_CHANGE_24H = 'percent_change_24h'
 ATTR_PERCENT_CHANGE_7D = 'percent_change_7d'
-ATTR_PRICE = 'price'
+ATTR_PRICE = 'price_usd'
 ATTR_SYMBOL = 'symbol'
 ATTR_TOTAL_SUPPLY = 'total_supply'
 
 CONF_ATTRIBUTION = "Data provided by CoinMarketCap"
 
 DEFAULT_CURRENCY = 'bitcoin'
-DEFAULT_DISPLAY_CURRENCY = 'USD'
 
 ICON = 'mdi:currency-usd'
 
@@ -41,26 +39,21 @@ SCAN_INTERVAL = timedelta(minutes=15)
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Optional(CONF_CURRENCY, default=DEFAULT_CURRENCY): cv.string,
-    vol.Optional(CONF_DISPLAY_CURRENCY, default=DEFAULT_DISPLAY_CURRENCY):
-        cv.string,
 })
 
 
 def setup_platform(hass, config, add_devices, discovery_info=None):
     """Set up the CoinMarketCap sensor."""
     currency = config.get(CONF_CURRENCY)
-    display_currency = config.get(CONF_DISPLAY_CURRENCY).lower()
 
     try:
-        CoinMarketCapData(currency, display_currency).update()
+        CoinMarketCapData(currency).update()
     except HTTPError:
-        _LOGGER.warning("Currency %s or display currency %s is not available. "
-                        "Using bitcoin and USD.", currency, display_currency)
+        _LOGGER.warning("Currency %s is not available. Using bitcoin",
+                        currency)
         currency = DEFAULT_CURRENCY
-        display_currency = DEFAULT_DISPLAY_CURRENCY
 
-    add_devices([CoinMarketCapSensor(
-        CoinMarketCapData(currency, display_currency))], True)
+    add_devices([CoinMarketCapSensor(CoinMarketCapData(currency))], True)
 
 
 class CoinMarketCapSensor(Entity):
@@ -70,7 +63,7 @@ class CoinMarketCapSensor(Entity):
         """Initialize the sensor."""
         self.data = data
         self._ticker = None
-        self._unit_of_measurement = self.data.display_currency.upper()
+        self._unit_of_measurement = 'USD'
 
     @property
     def name(self):
@@ -80,8 +73,7 @@ class CoinMarketCapSensor(Entity):
     @property
     def state(self):
         """Return the state of the sensor."""
-        return round(float(self._ticker.get(
-            'price_{}'.format(self.data.display_currency))), 2)
+        return round(float(self._ticker.get('price_usd')), 2)
 
     @property
     def unit_of_measurement(self):
@@ -97,12 +89,10 @@ class CoinMarketCapSensor(Entity):
     def device_state_attributes(self):
         """Return the state attributes of the sensor."""
         return {
-            ATTR_24H_VOLUME: self._ticker.get(
-                '24h_volume_{}'.format(self.data.display_currency)),
+            ATTR_24H_VOLUME_USD: self._ticker.get('24h_volume_usd'),
             ATTR_ATTRIBUTION: CONF_ATTRIBUTION,
             ATTR_AVAILABLE_SUPPLY: self._ticker.get('available_supply'),
-            ATTR_MARKET_CAP: self._ticker.get(
-                'market_cap_{}'.format(self.data.display_currency)),
+            ATTR_MARKET_CAP: self._ticker.get('market_cap_usd'),
             ATTR_PERCENT_CHANGE_24H: self._ticker.get('percent_change_24h'),
             ATTR_PERCENT_CHANGE_7D: self._ticker.get('percent_change_7d'),
             ATTR_SYMBOL: self._ticker.get('symbol'),
@@ -118,16 +108,12 @@ class CoinMarketCapSensor(Entity):
 class CoinMarketCapData(object):
     """Get the latest data and update the states."""
 
-    def __init__(self, currency, display_currency):
+    def __init__(self, currency):
         """Initialize the data object."""
         self.currency = currency
-        self.display_currency = display_currency
         self.ticker = None
 
     def update(self):
         """Get the latest data from blockchain.info."""
         from coinmarketcap import Market
-        self.ticker = Market().ticker(
-            self.currency,
-            limit=1,
-            convert=self.display_currency)
+        self.ticker = Market().ticker(self.currency, limit=1)

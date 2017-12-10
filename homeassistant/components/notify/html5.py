@@ -5,29 +5,27 @@ For more details about this platform, please refer to the documentation at
 https://home-assistant.io/components/notify.html5/
 """
 import asyncio
-import datetime
-import json
+import os
 import logging
+import json
 import time
+import datetime
 import uuid
 
-from aiohttp.hdrs import AUTHORIZATION
 import voluptuous as vol
 from voluptuous.humanize import humanize_error
 
-from homeassistant.util.json import load_json, save_json
-from homeassistant.exceptions import HomeAssistantError
-from homeassistant.components.frontend import add_manifest_json_key
-from homeassistant.components.http import HomeAssistantView
-from homeassistant.components.notify import (
-    ATTR_DATA, ATTR_TITLE, ATTR_TARGET, PLATFORM_SCHEMA, ATTR_TITLE_DEFAULT,
-    BaseNotificationService)
-from homeassistant.const import (
-    URL_ROOT, HTTP_BAD_REQUEST, HTTP_UNAUTHORIZED, HTTP_INTERNAL_SERVER_ERROR)
-from homeassistant.helpers import config_validation as cv
+from homeassistant.const import (HTTP_BAD_REQUEST, HTTP_INTERNAL_SERVER_ERROR,
+                                 HTTP_UNAUTHORIZED, URL_ROOT)
 from homeassistant.util import ensure_unique_string
+from homeassistant.components.notify import (
+    ATTR_TARGET, ATTR_TITLE, ATTR_TITLE_DEFAULT, ATTR_DATA,
+    BaseNotificationService, PLATFORM_SCHEMA)
+from homeassistant.components.http import HomeAssistantView
+from homeassistant.components.frontend import add_manifest_json_key
+from homeassistant.helpers import config_validation as cv
 
-REQUIREMENTS = ['pywebpush==1.3.0', 'PyJWT==1.5.3']
+REQUIREMENTS = ['pywebpush==1.0.6', 'PyJWT==1.5.2']
 
 DEPENDENCIES = ['frontend']
 
@@ -64,25 +62,24 @@ ATTR_JWT = 'jwt'
 # is valid.
 JWT_VALID_DAYS = 7
 
-KEYS_SCHEMA = vol.All(
-    dict, vol.Schema({
-        vol.Required(ATTR_AUTH): cv.string,
-        vol.Required(ATTR_P256DH): cv.string,
-    })
-)
+KEYS_SCHEMA = vol.All(dict,
+                      vol.Schema({
+                          vol.Required(ATTR_AUTH): cv.string,
+                          vol.Required(ATTR_P256DH): cv.string
+                          }))
 
-SUBSCRIPTION_SCHEMA = vol.All(
-    dict, vol.Schema({
-        # pylint: disable=no-value-for-parameter
-        vol.Required(ATTR_ENDPOINT): vol.Url(),
-        vol.Required(ATTR_KEYS): KEYS_SCHEMA,
-        vol.Optional(ATTR_EXPIRATIONTIME): vol.Any(None, cv.positive_int),
-    })
-)
+SUBSCRIPTION_SCHEMA = vol.All(dict,
+                              vol.Schema({
+                                  # pylint: disable=no-value-for-parameter
+                                  vol.Required(ATTR_ENDPOINT): vol.Url(),
+                                  vol.Required(ATTR_KEYS): KEYS_SCHEMA,
+                                  vol.Optional(ATTR_EXPIRATIONTIME):
+                                      vol.Any(None, cv.positive_int)
+                                  }))
 
 REGISTER_SCHEMA = vol.Schema({
     vol.Required(ATTR_SUBSCRIPTION): SUBSCRIPTION_SCHEMA,
-    vol.Required(ATTR_BROWSER): vol.In(['chrome', 'firefox']),
+    vol.Required(ATTR_BROWSER): vol.In(['chrome', 'firefox'])
 })
 
 CALLBACK_EVENT_PAYLOAD_SCHEMA = vol.Schema({
@@ -97,8 +94,8 @@ NOTIFY_CALLBACK_EVENT = 'html5_notification'
 
 # Badge and timestamp are Chrome specific (not in official spec)
 HTML5_SHOWNOTIFICATION_PARAMETERS = (
-    'actions', 'badge', 'body', 'dir', 'icon', 'image', 'lang',
-    'renotify', 'requireInteraction', 'tag', 'timestamp', 'vibrate')
+    'actions', 'badge', 'body', 'dir', 'icon', 'lang', 'renotify',
+    'requireInteraction', 'tag', 'timestamp', 'vibrate')
 
 
 def get_service(hass, config, discovery_info=None):
@@ -126,11 +123,21 @@ def get_service(hass, config, discovery_info=None):
 
 def _load_config(filename):
     """Load configuration."""
+    if not os.path.isfile(filename):
+        return {}
+
     try:
-        return load_json(filename)
-    except HomeAssistantError:
-        pass
-    return {}
+        with open(filename, 'r') as fdesc:
+            inp = fdesc.read()
+
+        # In case empty file
+        if not inp:
+            return {}
+
+        return json.loads(inp)
+    except (IOError, ValueError) as error:
+        _LOGGER.error("Reading config file %s failed: %s", filename, error)
+        return None
 
 
 class JSONBytesDecoder(json.JSONEncoder):
@@ -138,10 +145,22 @@ class JSONBytesDecoder(json.JSONEncoder):
 
     # pylint: disable=method-hidden
     def default(self, obj):
-        """Decode object if it's a bytes object, else defer to base class."""
+        """Decode object if it's a bytes object, else defer to baseclass."""
         if isinstance(obj, bytes):
             return obj.decode()
         return json.JSONEncoder.default(self, obj)
+
+
+def _save_config(filename, config):
+    """Save configuration."""
+    try:
+        with open(filename, 'w') as fdesc:
+            fdesc.write(json.dumps(
+                config, cls=JSONBytesDecoder, indent=4, sort_keys=True))
+    except (IOError, TypeError) as error:
+        _LOGGER.error("Saving config file failed: %s", error)
+        return False
+    return True
 
 
 class HTML5PushRegistrationView(HomeAssistantView):
@@ -173,7 +192,7 @@ class HTML5PushRegistrationView(HomeAssistantView):
 
         self.registrations[name] = data
 
-        if not save_json(self.json_path, self.registrations):
+        if not _save_config(self.json_path, self.registrations):
             return self.json_message(
                 'Error saving registration.', HTTP_INTERNAL_SERVER_ERROR)
 
@@ -202,7 +221,7 @@ class HTML5PushRegistrationView(HomeAssistantView):
 
         reg = self.registrations.pop(found)
 
-        if not save_json(self.json_path, self.registrations):
+        if not _save_config(self.json_path, self.registrations):
             self.registrations[found] = reg
             return self.json_message(
                 'Error saving registration.', HTTP_INTERNAL_SERVER_ERROR)
@@ -247,7 +266,7 @@ class HTML5PushCallbackView(HomeAssistantView):
     def check_authorization_header(self, request):
         """Check the authorization header."""
         import jwt
-        auth = request.headers.get(AUTHORIZATION, None)
+        auth = request.headers.get('Authorization', None)
         if not auth:
             return self.json_message('Authorization header is expected',
                                      status_code=HTTP_UNAUTHORIZED)
@@ -304,7 +323,8 @@ class HTML5PushCallbackView(HomeAssistantView):
         event_name = '{}.{}'.format(NOTIFY_CALLBACK_EVENT,
                                     event_payload[ATTR_TYPE])
         request.app['hass'].bus.fire(event_name, event_payload)
-        return self.json({'status': 'ok', 'event': event_payload[ATTR_TYPE]})
+        return self.json({'status': 'ok',
+                          'event': event_payload[ATTR_TYPE]})
 
 
 class HTML5NotificationService(BaseNotificationService):
@@ -390,9 +410,9 @@ class HTML5NotificationService(BaseNotificationService):
             if response.status_code == 410:
                 _LOGGER.info("Notification channel has expired")
                 reg = self.registrations.pop(target)
-                if not save_json(self.registrations_json_path,
-                                 self.registrations):
+                if not _save_config(self.registrations_json_path,
+                                    self.registrations):
                     self.registrations[target] = reg
-                    _LOGGER.error("Error saving registration")
+                    _LOGGER.error("Error saving registration.")
                 else:
                     _LOGGER.info("Configuration saved")

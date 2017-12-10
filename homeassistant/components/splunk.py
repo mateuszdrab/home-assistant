@@ -7,15 +7,13 @@ https://home-assistant.io/components/splunk/
 import json
 import logging
 
-from aiohttp.hdrs import AUTHORIZATION
 import requests
 import voluptuous as vol
 
 from homeassistant.const import (
-    CONF_SSL, CONF_HOST, CONF_NAME, CONF_PORT, CONF_TOKEN, EVENT_STATE_CHANGED)
+    CONF_NAME, CONF_HOST, CONF_PORT, CONF_SSL, CONF_TOKEN, EVENT_STATE_CHANGED)
 from homeassistant.helpers import state as state_helper
 import homeassistant.helpers.config_validation as cv
-from homeassistant.remote import JSONEncoder
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -53,7 +51,7 @@ def setup(hass, config):
 
     event_collector = '{}{}:{}/services/collector/event'.format(
         uri_scheme, host, port)
-    headers = {AUTHORIZATION: 'Splunk {}'.format(token)}
+    headers = {'Authorization': 'Splunk {}'.format(token)}
 
     def splunk_event_listener(event):
         """Listen for new messages on the bus and sends them to Splunk."""
@@ -83,8 +81,7 @@ def setup(hass, config):
                 "host": event_collector,
                 "event": json_body,
             }
-            requests.post(event_collector,
-                          data=json.dumps(payload, cls=JSONEncoder),
+            requests.post(event_collector, data=json.dumps(payload),
                           headers=headers, timeout=10)
         except requests.exceptions.RequestException as error:
             _LOGGER.exception("Error saving event to Splunk: %s", error)

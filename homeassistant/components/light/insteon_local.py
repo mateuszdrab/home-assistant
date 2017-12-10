@@ -4,14 +4,14 @@ Support for Insteon dimmers via local hub control.
 For more details about this component, please refer to the documentation at
 https://home-assistant.io/components/light.insteon_local/
 """
+import json
 import logging
+import os
 from datetime import timedelta
 
 from homeassistant.components.light import (
     ATTR_BRIGHTNESS, SUPPORT_BRIGHTNESS, Light)
 import homeassistant.util as util
-from homeassistant.util.json import load_json, save_json
-
 
 _CONFIGURING = {}
 _LOGGER = logging.getLogger(__name__)
@@ -31,7 +31,7 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
     """Set up the Insteon local light platform."""
     insteonhub = hass.data['insteon_local']
 
-    conf_lights = load_json(hass.config.path(INSTEON_LOCAL_LIGHTS_CONF))
+    conf_lights = config_from_file(hass.config.path(INSTEON_LOCAL_LIGHTS_CONF))
     if conf_lights:
         for device_id in conf_lights:
             setup_light(device_id, conf_lights[device_id], insteonhub, hass,
@@ -85,14 +85,42 @@ def setup_light(device_id, name, insteonhub, hass, add_devices_callback):
         configurator.request_done(request_id)
         _LOGGER.debug("Device configuration done")
 
-    conf_lights = load_json(hass.config.path(INSTEON_LOCAL_LIGHTS_CONF))
+    conf_lights = config_from_file(hass.config.path(INSTEON_LOCAL_LIGHTS_CONF))
     if device_id not in conf_lights:
         conf_lights[device_id] = name
 
-    save_json(hass.config.path(INSTEON_LOCAL_LIGHTS_CONF), conf_lights)
+    if not config_from_file(
+            hass.config.path(INSTEON_LOCAL_LIGHTS_CONF),
+            conf_lights):
+        _LOGGER.error("Failed to save configuration file")
 
     device = insteonhub.dimmer(device_id)
     add_devices_callback([InsteonLocalDimmerDevice(device, name)])
+
+
+def config_from_file(filename, config=None):
+    """Small configuration file management function."""
+    if config:
+        # We're writing configuration
+        try:
+            with open(filename, 'w') as fdesc:
+                fdesc.write(json.dumps(config))
+        except IOError as error:
+            _LOGGER.error("Saving config file failed: %s", error)
+            return False
+        return True
+    else:
+        # We're reading config
+        if os.path.isfile(filename):
+            try:
+                with open(filename, 'r') as fdesc:
+                    return json.loads(fdesc.read())
+            except IOError as error:
+                _LOGGER.error("Reading configuration file failed: %s", error)
+                # This won't work yet
+                return False
+        else:
+            return {}
 
 
 class InsteonLocalDimmerDevice(Light):
@@ -106,7 +134,7 @@ class InsteonLocalDimmerDevice(Light):
 
     @property
     def name(self):
-        """Return the name of the node."""
+        """Return the the name of the node."""
         return self.node.deviceName
 
     @property

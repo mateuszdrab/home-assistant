@@ -15,8 +15,7 @@ from homeassistant.helpers.entity import Entity
 from homeassistant.components.sensor import PLATFORM_SCHEMA
 from homeassistant.components.sensor.rest import RestData
 from homeassistant.const import (
-    ATTR_TEMPERATURE, CONF_API_KEY, CONF_NAME, ATTR_DATE, ATTR_TIME,
-    ATTR_VOLTAGE)
+    ATTR_TEMPERATURE, CONF_API_KEY, CONF_NAME, ATTR_DATE, ATTR_TIME)
 
 _LOGGER = logging.getLogger(__name__)
 _ENDPOINT = 'http://pvoutput.org/service/r2/getstatus.jsp'
@@ -26,6 +25,7 @@ ATTR_POWER_GENERATION = 'power_generation'
 ATTR_ENERGY_CONSUMPTION = 'energy_consumption'
 ATTR_POWER_CONSUMPTION = 'power_consumption'
 ATTR_EFFICIENCY = 'efficiency'
+ATTR_VOLTAGE = 'voltage'
 
 CONF_SYSTEM_ID = 'system_id'
 

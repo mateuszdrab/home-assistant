@@ -1,4 +1,4 @@
-"""Tests for fan platforms."""
+"""Test fan component plaforms."""
 
 import unittest
 

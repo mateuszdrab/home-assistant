@@ -9,13 +9,13 @@ from datetime import timedelta
 
 import voluptuous as vol
 
-import homeassistant.helpers.config_validation as cv
 from homeassistant.components.sensor import PLATFORM_SCHEMA
 from homeassistant.const import (
     CONF_HOST, CONF_PASSWORD, CONF_USERNAME, CONF_NAME, CONF_PORT,
-    CONF_MONITORED_VARIABLES, STATE_IDLE)
+    CONF_MONITORED_VARIABLES, STATE_UNKNOWN, STATE_IDLE)
 from homeassistant.helpers.entity import Entity
 from homeassistant.util import Throttle
+import homeassistant.helpers.config_validation as cv
 
 REQUIREMENTS = ['transmissionrpc==0.11']
 
@@ -26,10 +26,9 @@ DEFAULT_NAME = 'Transmission'
 DEFAULT_PORT = 9091
 
 SENSOR_TYPES = {
-    'active_torrents': ['Active Torrents', None],
     'current_status': ['Status', None],
     'download_speed': ['Down Speed', 'MB/s'],
-    'upload_speed': ['Up Speed', 'MB/s'],
+    'upload_speed': ['Up Speed', 'MB/s']
 }
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
@@ -81,7 +80,7 @@ class TransmissionSensor(Entity):
     def __init__(self, sensor_type, transmission_client, client_name):
         """Initialize the sensor."""
         self._name = SENSOR_TYPES[sensor_type][0]
-        self.tm_client = transmission_client
+        self.transmission_client = transmission_client
         self.type = sensor_type
         self.client_name = client_name
         self._state = None
@@ -118,9 +117,9 @@ class TransmissionSensor(Entity):
         self.refresh_transmission_data()
 
         if self.type == 'current_status':
-            if self.tm_client.session:
-                upload = self.tm_client.session.uploadSpeed
-                download = self.tm_client.session.downloadSpeed
+            if self.transmission_client.session:
+                upload = self.transmission_client.session.uploadSpeed
+                download = self.transmission_client.session.downloadSpeed
                 if upload > 0 and download > 0:
                     self._state = 'Up/Down'
                 elif upload > 0 and download == 0:
@@ -130,16 +129,14 @@ class TransmissionSensor(Entity):
                 else:
                     self._state = STATE_IDLE
             else:
-                self._state = None
+                self._state = STATE_UNKNOWN
 
-        if self.tm_client.session:
+        if self.transmission_client.session:
             if self.type == 'download_speed':
-                mb_spd = float(self.tm_client.session.downloadSpeed)
+                mb_spd = float(self.transmission_client.session.downloadSpeed)
                 mb_spd = mb_spd / 1024 / 1024
                 self._state = round(mb_spd, 2 if mb_spd < 0.1 else 1)
             elif self.type == 'upload_speed':
-                mb_spd = float(self.tm_client.session.uploadSpeed)
+                mb_spd = float(self.transmission_client.session.uploadSpeed)
                 mb_spd = mb_spd / 1024 / 1024
                 self._state = round(mb_spd, 2 if mb_spd < 0.1 else 1)
-            elif self.type == 'active_torrents':
-                self._state = self.tm_client.session.activeTorrentCount

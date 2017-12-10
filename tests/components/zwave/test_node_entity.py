@@ -330,34 +330,38 @@ class TestZWaveNodeEntity(unittest.TestCase):
         """Test state property."""
         self.node.is_ready = False
         self.entity.node_changed()
-        self.assertEqual('initializing', self.entity.state)
+        self.assertEqual('Dynamic', self.entity.state)
 
         self.node.is_failed = True
-        self.node.query_stage = 'Complete'
         self.entity.node_changed()
-        self.assertEqual('dead', self.entity.state)
+        self.assertEqual('Dead (Dynamic)', self.entity.state)
 
         self.node.is_failed = False
         self.node.is_awake = False
         self.entity.node_changed()
-        self.assertEqual('sleeping', self.entity.state)
+        self.assertEqual('Sleeping (Dynamic)', self.entity.state)
 
     def test_state_ready(self):
         """Test state property."""
-        self.node.query_stage = 'Complete'
         self.node.is_ready = True
         self.entity.node_changed()
-        self.assertEqual('ready', self.entity.state)
+        self.assertEqual('Ready', self.entity.state)
 
         self.node.is_failed = True
         self.entity.node_changed()
-        self.assertEqual('dead', self.entity.state)
+        self.assertEqual('Dead', self.entity.state)
 
         self.node.is_failed = False
         self.node.is_awake = False
         self.entity.node_changed()
-        self.assertEqual('sleeping', self.entity.state)
+        self.assertEqual('Sleeping', self.entity.state)
 
     def test_not_polled(self):
         """Test should_poll property."""
         self.assertFalse(self.entity.should_poll)
+
+
+def test_sub_status():
+    """Test sub_status function."""
+    assert node_entity.sub_status('Status', 'Stage') == 'Status (Stage)'
+    assert node_entity.sub_status('Status', '') == 'Status'

@@ -124,7 +124,7 @@ class OpenhomeDevice(MediaPlayerDevice):
         self._device.Stop()
 
     def media_play(self):
-        """Send play command."""
+        """Send play commmand."""
         self._device.Play()
 
     def media_next_track(self):

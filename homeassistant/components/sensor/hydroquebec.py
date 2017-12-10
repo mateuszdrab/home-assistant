@@ -21,7 +21,7 @@ from homeassistant.helpers.entity import Entity
 from homeassistant.util import Throttle
 import homeassistant.helpers.config_validation as cv
 
-REQUIREMENTS = ['pyhydroquebec==1.3.1']
+REQUIREMENTS = ['pyhydroquebec==1.2.0']
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,7 +34,6 @@ DEFAULT_NAME = 'HydroQuebec'
 
 REQUESTS_TIMEOUT = 15
 MIN_TIME_BETWEEN_UPDATES = timedelta(hours=1)
-SCAN_INTERVAL = timedelta(hours=1)
 
 SENSOR_TYPES = {
     'balance':
@@ -116,7 +115,7 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
     for variable in config[CONF_MONITORED_VARIABLES]:
         sensors.append(HydroQuebecSensor(hydroquebec_data, variable, name))
 
-    add_devices(sensors)
+    add_devices(sensors, True)
 
 
 class HydroQuebecSensor(Entity):

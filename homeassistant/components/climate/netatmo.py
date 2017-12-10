@@ -10,8 +10,7 @@ import voluptuous as vol
 
 from homeassistant.const import TEMP_CELSIUS, ATTR_TEMPERATURE
 from homeassistant.components.climate import (
-    STATE_HEAT, STATE_IDLE, ClimateDevice, PLATFORM_SCHEMA,
-    SUPPORT_TARGET_TEMPERATURE, SUPPORT_OPERATION_MODE, SUPPORT_AWAY_MODE)
+    STATE_HEAT, STATE_IDLE, ClimateDevice, PLATFORM_SCHEMA)
 from homeassistant.util import Throttle
 from homeassistant.loader import get_component
 import homeassistant.helpers.config_validation as cv
@@ -35,9 +34,6 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Optional(CONF_THERMOSTAT, default=[]):
         vol.All(cv.ensure_list, [cv.string]),
 })
-
-SUPPORT_FLAGS = (SUPPORT_TARGET_TEMPERATURE | SUPPORT_OPERATION_MODE |
-                 SUPPORT_AWAY_MODE)
 
 
 def setup_platform(hass, config, add_devices, discovery_info=None):
@@ -68,11 +64,6 @@ class NetatmoThermostat(ClimateDevice):
         self._name = module_name
         self._target_temperature = None
         self._away = None
-
-    @property
-    def supported_features(self):
-        """Return the list of supported features."""
-        return SUPPORT_FLAGS
 
     @property
     def name(self):

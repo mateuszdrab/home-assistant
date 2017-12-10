@@ -14,14 +14,13 @@ from homeassistant import const as ha_const
 from homeassistant.helpers import discovery, entity
 from homeassistant.util import slugify
 
-REQUIREMENTS = ['bellows==0.4.0']
+REQUIREMENTS = ['bellows==0.3.4']
 
 DOMAIN = 'zha'
 
-CONF_BAUDRATE = 'baudrate'
+CONF_USB_PATH = 'usb_path'
 CONF_DATABASE = 'database_path'
 CONF_DEVICE_CONFIG = 'device_config'
-CONF_USB_PATH = 'usb_path'
 DATA_DEVICE_CONFIG = 'zha_device_config'
 
 DEVICE_CONFIG_SCHEMA_ENTRY = vol.Schema({
@@ -31,7 +30,6 @@ DEVICE_CONFIG_SCHEMA_ENTRY = vol.Schema({
 CONFIG_SCHEMA = vol.Schema({
     DOMAIN: vol.Schema({
         CONF_USB_PATH: cv.string,
-        vol.Optional(CONF_BAUDRATE, default=57600): cv.positive_int,
         CONF_DATABASE: cv.string,
         vol.Optional(CONF_DEVICE_CONFIG, default={}):
             vol.Schema({cv.string: DEVICE_CONFIG_SCHEMA_ENTRY}),
@@ -43,9 +41,9 @@ ATTR_DURATION = 'duration'
 SERVICE_PERMIT = 'permit'
 SERVICE_DESCRIPTIONS = {
     SERVICE_PERMIT: {
-        "description": "Allow nodes to join the ZigBee network",
+        "description": "Allow nodes to join the Zigbee network",
         "fields": {
-            ATTR_DURATION: {
+            "duration": {
                 "description": "Time to permit joins, in seconds",
                 "example": "60",
             },
@@ -83,8 +81,7 @@ def async_setup(hass, config):
 
     ezsp_ = bellows.ezsp.EZSP()
     usb_path = config[DOMAIN].get(CONF_USB_PATH)
-    baudrate = config[DOMAIN].get(CONF_BAUDRATE)
-    yield from ezsp_.connect(usb_path, baudrate)
+    yield from ezsp_.connect(usb_path)
 
     database = config[DOMAIN].get(CONF_DATABASE)
     APPLICATION_CONTROLLER = ControllerApplication(ezsp_, database)
@@ -133,10 +130,6 @@ class ApplicationListener:
 
     def device_left(self, device):
         """Handle device leaving the network."""
-        pass
-
-    def device_removed(self, device):
-        """Handle device being removed from the network."""
         pass
 
     @asyncio.coroutine
@@ -225,7 +218,7 @@ class ApplicationListener:
 class Entity(entity.Entity):
     """A base class for ZHA entities."""
 
-    _domain = None  # Must be overridden by subclasses
+    _domain = None  # Must be overriden by subclasses
 
     def __init__(self, endpoint, in_clusters, out_clusters, manufacturer,
                  model, **kwargs):

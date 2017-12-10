@@ -6,14 +6,14 @@ https://home-assistant.io/components/notify.facebook/
 """
 import logging
 
-from aiohttp.hdrs import CONTENT_TYPE
 import requests
+
 import voluptuous as vol
 
-from homeassistant.components.notify import (
-    ATTR_DATA, ATTR_TARGET, PLATFORM_SCHEMA, BaseNotificationService)
-from homeassistant.const import CONTENT_TYPE_JSON
 import homeassistant.helpers.config_validation as cv
+from homeassistant.components.notify import (
+    ATTR_TARGET, ATTR_DATA, PLATFORM_SCHEMA, BaseNotificationService)
+from homeassistant.const import CONTENT_TYPE_JSON
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -56,21 +56,14 @@ class FacebookNotificationService(BaseNotificationService):
             return
 
         for target in targets:
-            # If the target starts with a "+", we suppose it's a phone number,
-            # otherwise it's a user id.
-            if target.startswith('+'):
-                recipient = {"phone_number": target}
-            else:
-                recipient = {"id": target}
-
             body = {
-                "recipient": recipient,
+                "recipient": {"phone_number": target},
                 "message": body_message
             }
             import json
             resp = requests.post(BASE_URL, data=json.dumps(body),
                                  params=payload,
-                                 headers={CONTENT_TYPE: CONTENT_TYPE_JSON},
+                                 headers={'Content-Type': CONTENT_TYPE_JSON},
                                  timeout=10)
             if resp.status_code != 200:
                 obj = resp.json()

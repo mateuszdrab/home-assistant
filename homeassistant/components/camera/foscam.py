@@ -15,7 +15,7 @@ from homeassistant.helpers import config_validation as cv
 
 _LOGGER = logging.getLogger(__name__)
 
-REQUIREMENTS = ['libpyfoscam==1.0']
+REQUIREMENTS = ['pyfoscam==1.2']
 
 CONF_IP = 'ip'
 
@@ -53,13 +53,13 @@ class FoscamCam(Camera):
         self._name = device_info.get(CONF_NAME)
         self._motion_status = False
 
-        from libpyfoscam import FoscamCamera
+        from foscam.foscam import FoscamCamera
 
         self._foscam_session = FoscamCamera(ip_address, port, self._username,
                                             self._password, verbose=False)
 
     def camera_image(self):
-        """Return a still image response from the camera."""
+        """Return a still image reponse from the camera."""
         # Send the request to snap a picture and return raw jpg data
         # Handle exception if host is not reachable or url failed
         result, response = self._foscam_session.snap_picture_2()

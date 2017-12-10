@@ -13,7 +13,7 @@ import voluptuous as vol
 from homeassistant.components.sensor import PLATFORM_SCHEMA
 from homeassistant.const import (
     CONF_INCLUDE, CONF_EXCLUDE, CONF_NAME, CONF_LATITUDE, CONF_LONGITUDE,
-    ATTR_ATTRIBUTION, ATTR_LATITUDE, ATTR_LONGITUDE, CONF_RADIUS,
+    ATTR_ATTRIBUTION, ATTR_LATITUDE, ATTR_LONGITUDE,
     LENGTH_KILOMETERS, LENGTH_METERS)
 from homeassistant.helpers.entity import Entity
 from homeassistant.util import slugify
@@ -24,6 +24,8 @@ import homeassistant.helpers.config_validation as cv
 REQUIREMENTS = ['crimereports==1.0.0']
 
 _LOGGER = logging.getLogger(__name__)
+
+CONF_RADIUS = 'radius'
 
 DOMAIN = 'crimereports'
 
@@ -56,11 +58,11 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
 
 
 class CrimeReportsSensor(Entity):
-    """Representation of a Crime Reports Sensor."""
+    """Crime Reports Sensor."""
 
     def __init__(self, hass, name, latitude, longitude, radius,
                  include, exclude):
-        """Initialize the Crime Reports sensor."""
+        """Initialize the sensor."""
         import crimereports
         self._hass = hass
         self._name = name

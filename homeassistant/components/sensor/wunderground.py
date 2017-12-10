@@ -17,7 +17,6 @@ from homeassistant.const import (
     TEMP_FAHRENHEIT, TEMP_CELSIUS, LENGTH_INCHES, LENGTH_KILOMETERS,
     LENGTH_MILES, LENGTH_FEET, STATE_UNKNOWN, ATTR_ATTRIBUTION,
     ATTR_FRIENDLY_NAME)
-from homeassistant.exceptions import PlatformNotReady
 from homeassistant.helpers.entity import Entity
 from homeassistant.util import Throttle
 import homeassistant.helpers.config_validation as cv
@@ -140,7 +139,7 @@ class WUDailySimpleForecastSensorConfig(WUSensorConfig):
             wu_unit (string): "fahrenheit", "celsius", "degrees" etc.
                  see the example json at:
         https://www.wunderground.com/weather/api/d/docs?d=data/forecast&MR=1
-            ha_unit (string): corresponding unit in home assistant
+            ha_unit (string): coresponding unit in home assistant
             title (string): friendly_name of the sensor
         """
         super().__init__(
@@ -608,22 +607,23 @@ LANG_CODES = [
     'KR', 'KU', 'LA', 'LV', 'LT', 'ND',
     'MK', 'MT', 'GM', 'MI', 'MR', 'MN',
     'NO', 'OC', 'PS', 'GN', 'PL', 'BR',
-    'PA', 'RO', 'RU', 'SR', 'SK', 'SL',
-    'SP', 'SI', 'SW', 'CH', 'TL', 'TT',
-    'TH', 'TR', 'TK', 'UA', 'UZ', 'VU',
-    'CY', 'SN', 'JI', 'YI',
+    'PA', 'PU', 'RO', 'RU', 'SR', 'SK',
+    'SL', 'SP', 'SI', 'SW', 'CH', 'TL',
+    'TT', 'TH', 'UA', 'UZ', 'VU', 'CY',
+    'SN', 'JI', 'YI',
 ]
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Required(CONF_API_KEY): cv.string,
     vol.Optional(CONF_PWS_ID): cv.string,
-    vol.Optional(CONF_LANG, default=DEFAULT_LANG): vol.All(vol.In(LANG_CODES)),
+    vol.Optional(CONF_LANG, default=DEFAULT_LANG):
+    vol.All(vol.In(LANG_CODES)),
     vol.Inclusive(CONF_LATITUDE, 'coordinates',
                   'Latitude and longitude must exist together'): cv.latitude,
     vol.Inclusive(CONF_LONGITUDE, 'coordinates',
                   'Latitude and longitude must exist together'): cv.longitude,
-    vol.Required(CONF_MONITORED_CONDITIONS):
-        vol.All(cv.ensure_list, vol.Length(min=1), [vol.In(SENSOR_TYPES)]),
+    vol.Required(CONF_MONITORED_CONDITIONS, default=[]):
+    vol.All(cv.ensure_list, [vol.In(SENSOR_TYPES)]),
 })
 
 
@@ -639,9 +639,11 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
     for variable in config[CONF_MONITORED_CONDITIONS]:
         sensors.append(WUndergroundSensor(rest, variable))
 
-    rest.update()
-    if not rest.data:
-        raise PlatformNotReady
+    try:
+        rest.update()
+    except ValueError as err:
+        _LOGGER.error("Received error from WUnderground: %s", err)
+        return False
 
     add_devices(sensors)
 
@@ -655,48 +657,20 @@ class WUndergroundSensor(Entity):
         """Initialize the sensor."""
         self.rest = rest
         self._condition = condition
-        self._state = None
-        self._attributes = {
-            ATTR_ATTRIBUTION: CONF_ATTRIBUTION,
-        }
-        self._icon = None
-        self._entity_picture = None
-        self._unit_of_measurement = self._cfg_expand("unit_of_measurement")
         self.rest.request_feature(SENSOR_TYPES[condition].feature)
 
     def _cfg_expand(self, what, default=None):
-        """Parse and return sensor data."""
         cfg = SENSOR_TYPES[self._condition]
         val = getattr(cfg, what)
-        if not callable(val):
-            return val
         try:
             val = val(self.rest)
-        except (KeyError, IndexError, TypeError, ValueError) as err:
-            _LOGGER.warning("Failed to expand cfg from WU API."
-                            " Condition: %s Attr: %s Error: %s",
-                            self._condition, what, repr(err))
+        except (KeyError, IndexError) as err:
+            _LOGGER.warning("Failed to parse response from WU API: %s", err)
             val = default
+        except TypeError:
+            pass  # val was not callable - keep original value
 
         return val
-
-    def _update_attrs(self):
-        """Parse and update device state attributes."""
-        attrs = self._cfg_expand("device_state_attributes", {})
-
-        self._attributes[ATTR_FRIENDLY_NAME] = self._cfg_expand(
-            "friendly_name")
-
-        for (attr, callback) in attrs.items():
-            if callable(callback):
-                try:
-                    self._attributes[attr] = callback(self.rest)
-                except (KeyError, IndexError, TypeError, ValueError) as err:
-                    _LOGGER.warning("Failed to update attrs from WU API."
-                                    " Condition: %s Attr: %s Error: %s",
-                                    self._condition, attr, repr(err))
-            else:
-                self._attributes[attr] = callback
 
     @property
     def name(self):
@@ -706,43 +680,45 @@ class WUndergroundSensor(Entity):
     @property
     def state(self):
         """Return the state of the sensor."""
-        return self._state
+        return self._cfg_expand("value", STATE_UNKNOWN)
 
     @property
     def device_state_attributes(self):
         """Return the state attributes."""
-        return self._attributes
+        attrs = self._cfg_expand("device_state_attributes", {})
+        for (attr, callback) in attrs.items():
+            try:
+                attrs[attr] = callback(self.rest)
+            except TypeError:
+                attrs[attr] = callback
+            except (KeyError, IndexError) as err:
+                _LOGGER.warning("Failed to parse response from WU API: %s",
+                                err)
+
+        attrs[ATTR_ATTRIBUTION] = CONF_ATTRIBUTION
+        attrs[ATTR_FRIENDLY_NAME] = self._cfg_expand("friendly_name")
+        return attrs
 
     @property
     def icon(self):
         """Return icon."""
-        return self._icon
+        return self._cfg_expand("icon", super().icon)
 
     @property
     def entity_picture(self):
         """Return the entity picture."""
-        return self._entity_picture
+        url = self._cfg_expand("entity_picture")
+        if url is not None:
+            return re.sub(r'^http://', 'https://', url, flags=re.IGNORECASE)
 
     @property
     def unit_of_measurement(self):
         """Return the units of measurement."""
-        return self._unit_of_measurement
+        return self._cfg_expand("unit_of_measurement")
 
     def update(self):
         """Update current conditions."""
         self.rest.update()
-
-        if not self.rest.data:
-            # no data, return
-            return
-
-        self._state = self._cfg_expand("value", STATE_UNKNOWN)
-        self._update_attrs()
-        self._icon = self._cfg_expand("icon", super().icon)
-        url = self._cfg_expand("entity_picture")
-        if isinstance(url, str):
-            self._entity_picture = re.sub(r'^http://', 'https://',
-                                          url, flags=re.IGNORECASE)
 
 
 class WUndergroundData(object):
@@ -783,10 +759,6 @@ class WUndergroundData(object):
                                  ["description"])
             else:
                 self.data = result
-                return True
         except ValueError as err:
             _LOGGER.error("Check WUnderground API %s", err.args)
-            self.data = None
-        except requests.RequestException as err:
-            _LOGGER.error("Error fetching WUnderground data: %s", repr(err))
             self.data = None
