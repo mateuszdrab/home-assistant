@@ -18,13 +18,14 @@ from homeassistant.const import (
     CONF_NAME, STATE_ALARM_DISARMED, STATE_ALARM_ARMED_HOME,
     STATE_ALARM_ARMED_AWAY, STATE_ALARM_TRIGGERED)
 
-REQUIREMENTS = ['pythonegardia==1.0.20']
+REQUIREMENTS = ['pythonegardia==1.0.22']
 
 _LOGGER = logging.getLogger(__name__)
 
 CONF_REPORT_SERVER_CODES = 'report_server_codes'
 CONF_REPORT_SERVER_ENABLED = 'report_server_enabled'
 CONF_REPORT_SERVER_PORT = 'report_server_port'
+CONF_REPORT_SERVER_CODES_IGNORE = 'ignore'
 
 DEFAULT_NAME = 'Egardia'
 DEFAULT_PORT = 80
@@ -115,12 +116,20 @@ class EgardiaAlarm(alarm.AlarmControlPanel):
         """Return the state of the device."""
         return self._status
 
+    @property
+    def should_poll(self):
+        """Poll if no report server is enabled."""
+        if not self._rs_enabled:
+            return True
+        return False
+
     def handle_system_status_event(self, event):
         """Handle egardia_system_status_event."""
         if event.data.get('status') is not None:
             statuscode = event.data.get('status')
             status = self.lookupstatusfromcode(statuscode)
             self.parsestatus(status)
+            self.schedule_update_ha_state()
 
     def listen_to_system_status(self):
         """Subscribe to egardia_system_status event."""
@@ -148,15 +157,20 @@ class EgardiaAlarm(alarm.AlarmControlPanel):
 
     def parsestatus(self, status):
         """Parse the status."""
-        newstatus = ([v for k, v in STATES.items()
-                      if status.upper() == k][0])
-        self._status = newstatus
+        _LOGGER.debug("Parsing status %s", status)
+        # Ignore the statuscode if it is IGNORE
+        if status.lower().strip() != CONF_REPORT_SERVER_CODES_IGNORE:
+            _LOGGER.debug("Not ignoring status")
+            newstatus = ([v for k, v in STATES.items()
+                          if status.upper() == k][0])
+            self._status = newstatus
+        else:
+            _LOGGER.error("Ignoring status")
 
     def update(self):
         """Update the alarm status."""
-        if not self._rs_enabled:
-            status = self._egardiasystem.getstate()
-            self.parsestatus(status)
+        status = self._egardiasystem.getstate()
+        self.parsestatus(status)
 
     def alarm_disarm(self, code=None):
         """Send disarm command."""

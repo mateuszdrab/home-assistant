@@ -9,7 +9,7 @@ from homeassistant.components import config
 from homeassistant.components.zwave import DATA_NETWORK, const
 from homeassistant.components.config.zwave import (
     ZWaveNodeValueView, ZWaveNodeGroupView, ZWaveNodeConfigView,
-    ZWaveUserCodeView)
+    ZWaveUserCodeView, ZWaveConfigWriteView)
 from tests.common import mock_http_component_app
 from tests.mock.zwave import MockNode, MockValue, MockEntityValues
 
@@ -143,7 +143,7 @@ def test_get_values(hass, test_client):
 
     node = MockNode(node_id=1)
     value = MockValue(value_id=123456, node=node, label='Test Label',
-                      instance=1, index=2)
+                      instance=1, index=2, poll_intensity=4)
     values = MockEntityValues(primary=value)
     node2 = MockNode(node_id=2)
     value2 = MockValue(value_id=234567, node=node2, label='Test Label 2')
@@ -162,6 +162,7 @@ def test_get_values(hass, test_client):
             'label': 'Test Label',
             'instance': 1,
             'index': 2,
+            'poll_intensity': 4,
         }
     }
 
@@ -416,3 +417,36 @@ def test_get_usercodes_no_genreuser(hass, test_client):
     result = yield from resp.json()
 
     assert result == {}
+
+
+@asyncio.coroutine
+def test_save_config_no_network(hass, test_client):
+    """Test saving configuration without network data."""
+    app = mock_http_component_app(hass)
+    ZWaveConfigWriteView().register(app.router)
+
+    client = yield from test_client(app)
+
+    resp = yield from client.post('/api/zwave/saveconfig')
+
+    assert resp.status == 404
+    result = yield from resp.json()
+    assert result == {'message': 'No Z-Wave network data found'}
+
+
+@asyncio.coroutine
+def test_save_config(hass, test_client):
+    """Test saving configuration."""
+    app = mock_http_component_app(hass)
+    ZWaveConfigWriteView().register(app.router)
+
+    network = hass.data[DATA_NETWORK] = MagicMock()
+
+    client = yield from test_client(app)
+
+    resp = yield from client.post('/api/zwave/saveconfig')
+
+    assert resp.status == 200
+    result = yield from resp.json()
+    assert network.write_config.called
+    assert result == {'message': 'Z-Wave configuration saved to file.'}

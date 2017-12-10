@@ -29,48 +29,62 @@ COMMENT_REQUIREMENTS = (
     'blinkt',
     'smbus-cffi',
     'envirophat',
-    'i2csense'
+    'i2csense',
+    'credstash',
+    'pytradfri',
 )
 
 TEST_REQUIREMENTS = (
-    'pydispatch',
-    'influxdb',
-    'nx584',
-    'uvcclient',
-    'somecomfort',
     'aioautomatic',
-    'SoCo',
-    'libsoundtouch',
-    'libpurecoollink',
-    'rxv',
-    'apns2',
-    'sqlalchemy',
-    'forecastio',
     'aiohttp_cors',
-    'pilight',
+    'apns2',
+    'caldav',
+    'coinmarketcap',
+    'defusedxml',
+    'dsmr_parser',
+    'ephem',
+    'evohomeclient',
+    'feedparser',
     'fuzzywuzzy',
+    'gTTS-token',
+    'ha-ffmpeg',
+    'haversine',
+    'hbmqtt',
+    'holidays',
+    'home-assistant-frontend',
+    'influxdb',
+    'libpurecoollink',
+    'libsoundtouch',
+    'mficlient',
+    'numpy',
+    'paho-mqtt',
+    'pexpect',
+    'pilight',
+    'pmsensor',
+    'prometheus_client',
+    'py-canary',
+    'pydispatcher',
+    'PyJWT',
+    'pylitejet',
+    'pynx584',
+    'python-forecastio',
+    'pyunifi',
+    'pywebpush',
+    'restrictedpython',
     'rflink',
     'ring_doorbell',
+    'rxv',
     'sleepyq',
+    'SoCo',
+    'somecomfort',
+    'sqlalchemy',
     'statsd',
-    'pylitejet',
-    'holidays',
-    'evohomeclient',
-    'pexpect',
-    'hbmqtt',
-    'paho',
-    'dsmr_parser',
-    'mficlient',
-    'pmsensor',
+    'uvcclient',
+    'warrant',
     'yahoo-finance',
-    'ha-ffmpeg',
-    'gTTS-token',
-    'pywebpush',
-    'PyJWT',
-    'restrictedpython',
-    'pyunifi',
-    'prometheus_client',
-    'ephem'
+    'pythonwhois',
+    'wakeonlan',
+    'vultr'
 )
 
 IGNORE_PACKAGES = (
@@ -198,11 +212,13 @@ def requirements_test_output(reqs):
     output = []
     output.append('# Home Assistant test')
     output.append('\n')
-    with open('requirements_test.txt') as fp:
-        output.append(fp.read())
+    with open('requirements_test.txt') as test_file:
+        output.append(test_file.read())
     output.append('\n')
     filtered = {key: value for key, value in reqs.items()
-                if any(ign in key for ign in TEST_REQUIREMENTS)}
+                if any(
+                    re.search(r'(^|#){}($|[=><])'.format(ign),
+                              key) is not None for ign in TEST_REQUIREMENTS)}
     output.append(generate_requirements_list(filtered))
 
     return ''.join(output)

@@ -127,6 +127,12 @@ def get_arguments() -> argparse.Namespace:
         default=None,
         help='Enables daily log rotation and keeps up to the specified days')
     parser.add_argument(
+        '--log-file',
+        type=str,
+        default=None,
+        help='Log file to write to.  If not set, CONFIG/home-assistant.log '
+             'is used')
+    parser.add_argument(
         '--runner',
         action='store_true',
         help='On restart exit with code {}'.format(RESTART_EXIT_CODE))
@@ -224,7 +230,7 @@ def closefds_osx(min_fd: int, max_fd: int) -> None:
 
 def cmdline() -> List[str]:
     """Collect path and arguments to re-execute the current hass instance."""
-    if sys.argv[0].endswith(os.path.sep + '__main__.py'):
+    if os.path.basename(sys.argv[0]) == '__main__.py':
         modulepath = os.path.dirname(sys.argv[0])
         os.environ['PYTHONPATH'] = os.path.dirname(modulepath)
         return [sys.executable] + [arg for arg in sys.argv if
@@ -256,13 +262,14 @@ def setup_and_run_hass(config_dir: str,
         }
         hass = bootstrap.from_config_dict(
             config, config_dir=config_dir, verbose=args.verbose,
-            skip_pip=args.skip_pip, log_rotate_days=args.log_rotate_days)
+            skip_pip=args.skip_pip, log_rotate_days=args.log_rotate_days,
+            log_file=args.log_file)
     else:
         config_file = ensure_config_file(config_dir)
         print('Config directory:', config_dir)
         hass = bootstrap.from_config_file(
             config_file, verbose=args.verbose, skip_pip=args.skip_pip,
-            log_rotate_days=args.log_rotate_days)
+            log_rotate_days=args.log_rotate_days, log_file=args.log_file)
 
     if hass is None:
         return None

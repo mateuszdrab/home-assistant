@@ -35,7 +35,7 @@ from . import workaround
 from .discovery_schemas import DISCOVERY_SCHEMAS
 from .util import check_node_schema, check_value_schema, node_name
 
-REQUIREMENTS = ['pydispatcher==2.0.5', 'python_openzwave==0.4.0.31']
+REQUIREMENTS = ['pydispatcher==2.0.5', 'python_openzwave==0.4.0.35']
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -85,6 +85,12 @@ SET_CONFIG_PARAMETER_SCHEMA = vol.Schema({
     vol.Optional(const.ATTR_CONFIG_SIZE, default=2): vol.Coerce(int)
 })
 
+SET_POLL_INTENSITY_SCHEMA = vol.Schema({
+    vol.Required(const.ATTR_NODE_ID): vol.Coerce(int),
+    vol.Required(const.ATTR_VALUE_ID): vol.Coerce(int),
+    vol.Required(const.ATTR_POLL_INTENSITY): vol.Coerce(int),
+})
+
 PRINT_CONFIG_PARAMETER_SCHEMA = vol.Schema({
     vol.Required(const.ATTR_NODE_ID): vol.Coerce(int),
     vol.Required(const.ATTR_CONFIG_PARAMETER): vol.Coerce(int),
@@ -116,6 +122,17 @@ SET_WAKEUP_SCHEMA = vol.Schema({
     vol.Required(const.ATTR_CONFIG_VALUE):
         vol.All(vol.Coerce(int), cv.positive_int),
 })
+
+HEAL_NODE_SCHEMA = vol.Schema({
+    vol.Required(const.ATTR_NODE_ID): vol.Coerce(int),
+    vol.Optional(const.ATTR_RETURN_ROUTES, default=False): cv.boolean,
+})
+
+TEST_NODE_SCHEMA = vol.Schema({
+    vol.Required(const.ATTR_NODE_ID): vol.Coerce(int),
+    vol.Optional(const.ATTR_MESSAGES, default=1): cv.positive_int,
+})
+
 
 DEVICE_CONFIG_SCHEMA_ENTRY = vol.Schema({
     vol.Optional(CONF_POLLING_INTENSITY): cv.positive_int,
@@ -415,6 +432,29 @@ def setup(hass, config):
             "Renamed Z-Wave value (Node %d Value %d) to %s",
             node_id, value_id, name)
 
+    def set_poll_intensity(service):
+        """Set the polling intensity of a node value."""
+        node_id = service.data.get(const.ATTR_NODE_ID)
+        value_id = service.data.get(const.ATTR_VALUE_ID)
+        node = network.nodes[node_id]
+        value = node.values[value_id]
+        intensity = service.data.get(const.ATTR_POLL_INTENSITY)
+        if intensity == 0:
+            if value.disable_poll():
+                _LOGGER.info("Polling disabled (Node %d Value %d)",
+                             node_id, value_id)
+                return
+            _LOGGER.info("Polling disabled failed (Node %d Value %d)",
+                         node_id, value_id)
+        else:
+            if value.enable_poll(intensity):
+                _LOGGER.info(
+                    "Set polling intensity (Node %d Value %d) to %s",
+                    node_id, value_id, intensity)
+                return
+            _LOGGER.info("Set polling intensity failed (Node %d Value %d)",
+                         node_id, value_id)
+
     def remove_failed_node(service):
         """Remove failed node."""
         node_id = service.data.get(const.ATTR_NODE_ID)
@@ -535,6 +575,22 @@ def setup(hass, config):
         _LOGGER.info("Node %s on instance %s does not have resettable "
                      "meters.", node_id, instance)
 
+    def heal_node(service):
+        """Heal a node on the network."""
+        node_id = service.data.get(const.ATTR_NODE_ID)
+        update_return_routes = service.data.get(const.ATTR_RETURN_ROUTES)
+        node = network.nodes[node_id]
+        _LOGGER.info("Z-Wave node heal running for node %s", node_id)
+        node.heal(update_return_routes)
+
+    def test_node(service):
+        """Send test messages to a node on the network."""
+        node_id = service.data.get(const.ATTR_NODE_ID)
+        messages = service.data.get(const.ATTR_MESSAGES)
+        node = network.nodes[node_id]
+        _LOGGER.info("Sending %s test-messages to node %s.", messages, node_id)
+        node.test(messages)
+
     def start_zwave(_service_or_event):
         """Startup Z-Wave network."""
         _LOGGER.info("Starting Z-Wave network...")
@@ -651,6 +707,20 @@ def setup(hass, config):
                                descriptions[
                                    const.SERVICE_RESET_NODE_METERS],
                                schema=RESET_NODE_METERS_SCHEMA)
+        hass.services.register(DOMAIN, const.SERVICE_SET_POLL_INTENSITY,
+                               set_poll_intensity,
+                               descriptions[const.SERVICE_SET_POLL_INTENSITY],
+                               schema=SET_POLL_INTENSITY_SCHEMA)
+        hass.services.register(DOMAIN, const.SERVICE_HEAL_NODE,
+                               heal_node,
+                               descriptions[
+                                   const.SERVICE_HEAL_NODE],
+                               schema=HEAL_NODE_SCHEMA)
+        hass.services.register(DOMAIN, const.SERVICE_TEST_NODE,
+                               test_node,
+                               descriptions[
+                                   const.SERVICE_TEST_NODE],
+                               schema=TEST_NODE_SCHEMA)
 
     # Setup autoheal
     if autoheal:
@@ -775,8 +845,6 @@ class ZWaveDeviceEntityValues():
             node_config.get(CONF_POLLING_INTENSITY), int)
         if polling_intensity:
             self.primary.enable_poll(polling_intensity)
-        else:
-            self.primary.disable_poll()
 
         platform = get_platform(component, DOMAIN)
         device = platform.get_device(
@@ -887,6 +955,7 @@ class ZWaveDeviceEntity(ZWaveBaseEntity):
             const.ATTR_NODE_ID: self.node_id,
             const.ATTR_VALUE_INDEX: self.values.primary.index,
             const.ATTR_VALUE_INSTANCE: self.values.primary.instance,
+            const.ATTR_VALUE_ID: str(self.values.primary.value_id),
             'old_entity_id': self.old_entity_id,
             'new_entity_id': self.new_entity_id,
         }

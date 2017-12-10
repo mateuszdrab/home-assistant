@@ -33,7 +33,7 @@ import homeassistant.util.color as color_util
 
 _LOGGER = logging.getLogger(__name__)
 
-REQUIREMENTS = ['aiolifx==0.5.4', 'aiolifx_effects==0.1.1']
+REQUIREMENTS = ['aiolifx==0.6.1', 'aiolifx_effects==0.1.2']
 
 UDP_BROADCAST_PORT = 56700
 
@@ -157,20 +157,10 @@ def async_setup_platform(hass, config, async_add_devices, discovery_info=None):
     return True
 
 
-def lifxwhite(device):
-    """Return whether this is a white-only bulb."""
-    features = aiolifx().products.features_map.get(device.product, None)
-    if features:
-        return not features["color"]
-    return False
-
-
-def lifxmultizone(device):
-    """Return whether this is a multizone bulb/strip."""
-    features = aiolifx().products.features_map.get(device.product, None)
-    if features:
-        return features["multizone"]
-    return False
+def lifx_features(device):
+    """Return a feature map for this device, or a default map if unknown."""
+    return aiolifx().products.features_map.get(device.product) or \
+        aiolifx().products.features_map.get(1)
 
 
 def find_hsbk(**kwargs):
@@ -342,12 +332,12 @@ class LIFXManager(object):
                 device.retry_count = MESSAGE_RETRIES
                 device.unregister_timeout = UNAVAILABLE_GRACE
 
-                if lifxwhite(device):
-                    entity = LIFXWhite(device, self.effects_conductor)
-                elif lifxmultizone(device):
+                if lifx_features(device)["multizone"]:
                     entity = LIFXStrip(device, self.effects_conductor)
-                else:
+                elif lifx_features(device)["color"]:
                     entity = LIFXColor(device, self.effects_conductor)
+                else:
+                    entity = LIFXWhite(device, self.effects_conductor)
 
                 _LOGGER.debug("%s register READY", entity.who)
                 self.entities[device.mac_addr] = entity
@@ -426,6 +416,29 @@ class LIFXLight(Light):
     def who(self):
         """Return a string identifying the device."""
         return "%s (%s)" % (self.device.ip_addr, self.name)
+
+    @property
+    def min_mireds(self):
+        """Return the coldest color_temp that this light supports."""
+        kelvin = lifx_features(self.device)['max_kelvin']
+        return math.floor(color_util.color_temperature_kelvin_to_mired(kelvin))
+
+    @property
+    def max_mireds(self):
+        """Return the warmest color_temp that this light supports."""
+        kelvin = lifx_features(self.device)['min_kelvin']
+        return math.ceil(color_util.color_temperature_kelvin_to_mired(kelvin))
+
+    @property
+    def supported_features(self):
+        """Flag supported features."""
+        support = SUPPORT_BRIGHTNESS | SUPPORT_TRANSITION | SUPPORT_EFFECT
+
+        device_features = lifx_features(self.device)
+        if device_features['min_kelvin'] != device_features['max_kelvin']:
+            support |= SUPPORT_COLOR_TEMP
+
+        return support
 
     @property
     def brightness(self):
@@ -572,22 +585,6 @@ class LIFXWhite(LIFXLight):
     """Representation of a white-only LIFX light."""
 
     @property
-    def min_mireds(self):
-        """Return the coldest color_temp that this light supports."""
-        return math.floor(color_util.color_temperature_kelvin_to_mired(6500))
-
-    @property
-    def max_mireds(self):
-        """Return the warmest color_temp that this light supports."""
-        return math.ceil(color_util.color_temperature_kelvin_to_mired(2700))
-
-    @property
-    def supported_features(self):
-        """Flag supported features."""
-        return (SUPPORT_BRIGHTNESS | SUPPORT_COLOR_TEMP | SUPPORT_TRANSITION |
-                SUPPORT_EFFECT)
-
-    @property
     def effect_list(self):
         """Return the list of supported effects for this light."""
         return [
@@ -600,20 +597,11 @@ class LIFXColor(LIFXLight):
     """Representation of a color LIFX light."""
 
     @property
-    def min_mireds(self):
-        """Return the coldest color_temp that this light supports."""
-        return math.floor(color_util.color_temperature_kelvin_to_mired(9000))
-
-    @property
-    def max_mireds(self):
-        """Return the warmest color_temp that this light supports."""
-        return math.ceil(color_util.color_temperature_kelvin_to_mired(2500))
-
-    @property
     def supported_features(self):
         """Flag supported features."""
-        return (SUPPORT_BRIGHTNESS | SUPPORT_COLOR_TEMP | SUPPORT_TRANSITION |
-                SUPPORT_EFFECT | SUPPORT_RGB_COLOR | SUPPORT_XY_COLOR)
+        support = super().supported_features
+        support |= SUPPORT_RGB_COLOR | SUPPORT_XY_COLOR
+        return support
 
     @property
     def effect_list(self):
@@ -642,6 +630,18 @@ class LIFXStrip(LIFXColor):
         bulb = self.device
         num_zones = len(bulb.color_zones)
 
+        zones = kwargs.get(ATTR_ZONES)
+        if zones is None:
+            # Fast track: setting all zones to the same brightness and color
+            # can be treated as a single-zone bulb.
+            if hsbk[2] is not None and hsbk[3] is not None:
+                yield from super().set_color(ack, hsbk, kwargs, duration)
+                return
+
+            zones = list(range(0, num_zones))
+        else:
+            zones = list(filter(lambda x: x < num_zones, set(zones)))
+
         # Zone brightness is not reported when powered off
         if not self.is_on and hsbk[2] is None:
             yield from self.set_power(ack, True)
@@ -649,12 +649,6 @@ class LIFXStrip(LIFXColor):
             yield from self.update_color_zones()
             yield from self.set_power(ack, False)
             yield from asyncio.sleep(0.3)
-
-        zones = kwargs.get(ATTR_ZONES, None)
-        if zones is None:
-            zones = list(range(0, num_zones))
-        else:
-            zones = list(filter(lambda x: x < num_zones, set(zones)))
 
         # Send new color to each zone
         for index, zone in enumerate(zones):
@@ -684,8 +678,7 @@ class LIFXStrip(LIFXColor):
             # Each get_color_zones can update 8 zones at once
             resp = yield from AwaitAioLIFX().wait(partial(
                 self.device.get_color_zones,
-                start_index=zone,
-                end_index=zone+7))
+                start_index=zone))
             if resp:
                 zone += 8
                 top = resp.count
