@@ -20,7 +20,7 @@ from homeassistant.helpers.config_validation import PLATFORM_SCHEMA  # noqa
 import homeassistant.helpers.config_validation as cv
 from homeassistant.const import (
     STATE_ON, SERVICE_TURN_ON, SERVICE_TURN_OFF, SERVICE_TOGGLE,
-    ATTR_ENTITY_ID)
+    ATTR_ENTITY_ID, ATTR_EXCLUDE)
 from homeassistant.components import group
 
 DOMAIN = 'switch'
@@ -44,6 +44,7 @@ PROP_TO_ATTR = {
 
 SWITCH_SERVICE_SCHEMA = vol.Schema({
     vol.Optional(ATTR_ENTITY_ID): cv.entity_ids,
+    vol.Optional(ATTR_EXCLUDE): cv.entity_ids,
 })
 
 _LOGGER = logging.getLogger(__name__)

@@ -15,7 +15,7 @@ from homeassistant.const import (
     ATTR_ENTITY_ID, CONF_ICON, CONF_NAME, STATE_CLOSED, STATE_HOME,
     STATE_NOT_HOME, STATE_OFF, STATE_ON, STATE_OPEN, STATE_LOCKED,
     STATE_UNLOCKED, STATE_OK, STATE_PROBLEM, STATE_UNKNOWN,
-    ATTR_ASSUMED_STATE, SERVICE_RELOAD)
+    ATTR_ASSUMED_STATE, SERVICE_RELOAD, ATTR_EXCLUDE)
 from homeassistant.core import callback
 from homeassistant.loader import bind_hass
 from homeassistant.helpers.entity import Entity, async_generate_entity_id
@@ -31,11 +31,13 @@ ENTITY_ID_FORMAT = DOMAIN + '.{}'
 CONF_ENTITIES = 'entities'
 CONF_VIEW = 'view'
 CONF_CONTROL = 'control'
+CONF_EXCLUDE = 'exclude'
 
 ATTR_ADD_ENTITIES = 'add_entities'
 ATTR_AUTO = 'auto'
 ATTR_CONTROL = 'control'
 ATTR_ENTITIES = 'entities'
+ATTR_EXCLUDE = 'exclude'
 ATTR_ICON = 'icon'
 ATTR_NAME = 'name'
 ATTR_OBJECT_ID = 'object_id'
@@ -63,6 +65,7 @@ SET_SERVICE_SCHEMA = vol.Schema({
     vol.Optional(ATTR_ICON): cv.string,
     vol.Optional(ATTR_CONTROL): CONTROL_TYPES,
     vol.Optional(ATTR_VISIBLE): cv.boolean,
+    vol.Optional(ATTR_EXCLUDE): cv.entity_ids,
     vol.Exclusive(ATTR_ENTITIES, 'entities'): cv.entity_ids,
     vol.Exclusive(ATTR_ADD_ENTITIES, 'entities'): cv.entity_ids,
 })
@@ -84,6 +87,7 @@ def _conf_preprocess(value):
 
 GROUP_SCHEMA = vol.Schema({
     vol.Optional(CONF_ENTITIES): vol.Any(cv.entity_ids, None),
+    vol.Optional(CONF_EXCLUDE): vol.Any(cv.entity_ids, None),
     CONF_VIEW: cv.boolean,
     CONF_NAME: cv.string,
     CONF_ICON: cv.icon,
@@ -144,24 +148,25 @@ def set_visibility(hass, entity_id=None, visible=True):
 
 
 @bind_hass
-def set_group(hass, object_id, name=None, entity_ids=None, visible=None,
+def set_group(hass, object_id, name=None, entity_ids=None, exclude=None, visible=None,
               icon=None, view=None, control=None, add=None):
     """Create a new user group."""
     hass.add_job(
-        async_set_group, hass, object_id, name, entity_ids, visible, icon,
+        async_set_group, hass, object_id, name, entity_ids, exclude, visible, icon,
         view, control, add)
 
 
 @callback
 @bind_hass
 def async_set_group(hass, object_id, name=None, entity_ids=None, visible=None,
-                    icon=None, view=None, control=None, add=None):
+                    icon=None, view=None, control=None, add=None, exclude=None):
     """Create a new user group."""
     data = {
         key: value for key, value in [
             (ATTR_OBJECT_ID, object_id),
             (ATTR_NAME, name),
             (ATTR_ENTITIES, entity_ids),
+            (ATTR_EXCLUDE, exclude),
             (ATTR_VISIBLE, visible),
             (ATTR_ICON, icon),
             (ATTR_VIEW, view),
@@ -209,10 +214,15 @@ def expand_entity_ids(hass, entity_ids):
                 if entity_id in child_entities:
                     child_entities = list(child_entities)
                     child_entities.remove(entity_id)
+                # Get excluded items from group and remove them 
+                # (this allows removal of items from underyling referenced groups)
+                
+                exclude_ids = get_excluded_members(hass, entity_id)
+                
                 found_ids.extend(
                     ent_id for ent_id
                     in expand_entity_ids(hass, child_entities)
-                    if ent_id not in found_ids)
+                    if ent_id not in found_ids and ent_id not in exclude_ids)
 
             else:
                 if entity_id not in found_ids:
@@ -224,7 +234,23 @@ def expand_entity_ids(hass, entity_ids):
 
     return found_ids
 
-
+@bind_hass
+def get_excluded_members(hass, entity_id):
+    """Get only excluded members of a group.
+    
+    Async friendly.
+    """
+    group = hass.states.get(entity_id)
+    
+    exclude_ids = []
+    
+    if group and ATTR_EXCLUDE in group.attributes:
+        exclude_ids = expand_entity_ids(hass, group.attributes[ATTR_EXCLUDE])    
+    
+    exclude_ids.append(entity_id)
+    
+    return exclude_ids
+    
 @bind_hass
 def get_entity_ids(hass, entity_id, domain_filter=None):
     """Get members of this group.
@@ -236,14 +262,24 @@ def get_entity_ids(hass, entity_id, domain_filter=None):
     if not group or ATTR_ENTITY_ID not in group.attributes:
         return []
 
-    entity_ids = group.attributes[ATTR_ENTITY_ID]
+    entity_ids = group.attributes[ATTR_ENTITY_ID]    
+    
+    if not group or ATTR_EXCLUDE not in group.attributes:
+        exclude_ids = []
+    else:
+        exclude_ids = expand_entity_ids(hass, group.attributes[ATTR_EXCLUDE])
+      
+    #if ATTR_EXCLUDE  in group.attributes:      
+    #    exclude_ids.extend(group.attributes[ATTR_EXCLUDE])
+    
     if not domain_filter:
-        return entity_ids
+        return [ent_id for ent_id in entity_ids
+                 if ent_id not in exclude_ids]
 
     domain_filter = domain_filter.lower() + '.'
 
     return [ent_id for ent_id in entity_ids
-            if ent_id.startswith(domain_filter)]
+            if (ent_id.startswith(domain_filter) and ent_id not in exclude_ids)]
 
 
 @asyncio.coroutine
@@ -282,7 +318,7 @@ def async_setup(hass, config):
                 service.data.get(ATTR_ADD_ENTITIES) or None
 
             extra_arg = {attr: service.data[attr] for attr in (
-                ATTR_VISIBLE, ATTR_ICON, ATTR_VIEW, ATTR_CONTROL
+                ATTR_VISIBLE, ATTR_ICON, ATTR_VIEW, ATTR_CONTROL, ATTR_EXCLUDE
             ) if service.data.get(attr) is not None}
 
             new_group = yield from Group.async_create_group(
@@ -313,7 +349,11 @@ def async_setup(hass, config):
             if ATTR_NAME in service.data:
                 group.name = service.data[ATTR_NAME]
                 need_update = True
-
+                
+            if ATTR_EXCLUDE in service.data:
+                group.exclude = service.data[ATTR_EXCLUDE]
+                need_update = True
+                
             if ATTR_VISIBLE in service.data:
                 group.visible = service.data[ATTR_VISIBLE]
                 need_update = True
@@ -384,12 +424,12 @@ def _async_process_config(hass, config, component):
         icon = conf.get(CONF_ICON)
         view = conf.get(CONF_VIEW)
         control = conf.get(CONF_CONTROL)
-
+        exclude = conf.get(CONF_EXCLUDE) or []
         # Don't create tasks and await them all. The order is important as
         # groups get a number based on creation order.
         group = yield from Group.async_create_group(
             hass, name, entity_ids, icon=icon, view=view,
-            control=control, object_id=object_id)
+            control=control, object_id=object_id, exclude=exclude)
         groups.append(group)
 
     if groups:
@@ -400,7 +440,7 @@ class Group(Entity):
     """Track a group of entity ids."""
 
     def __init__(self, hass, name, order=None, visible=True, icon=None,
-                 view=False, control=None, user_defined=True):
+                 view=False, control=None, exclude=None, user_defined=True):
         """Initialize a group.
 
         This Object has factory function for creation.
@@ -413,6 +453,7 @@ class Group(Entity):
         self.tracking = []
         self.group_on = None
         self.group_off = None
+        self.exclude = exclude
         self.visible = visible
         self.control = control
         self._user_defined = user_defined
@@ -423,19 +464,19 @@ class Group(Entity):
     @staticmethod
     def create_group(hass, name, entity_ids=None, user_defined=True,
                      visible=True, icon=None, view=False, control=None,
-                     object_id=None):
+                     object_id=None, exclude=None):
         """Initialize a group."""
         return run_coroutine_threadsafe(
             Group.async_create_group(
                 hass, name, entity_ids, user_defined, visible, icon, view,
-                control, object_id),
+                control, object_id, exclude),
             hass.loop).result()
 
     @staticmethod
     @asyncio.coroutine
     def async_create_group(hass, name, entity_ids=None, user_defined=True,
                            visible=True, icon=None, view=False, control=None,
-                           object_id=None):
+                           object_id=None, exclude=None):
         """Initialize a group.
 
         This method must be run in the event loop.
@@ -443,7 +484,7 @@ class Group(Entity):
         group = Group(
             hass, name,
             order=len(hass.states.async_entity_ids(DOMAIN)),
-            visible=visible, icon=icon, view=view, control=control,
+            visible=visible, icon=icon, view=view, control=control, exclude=exclude,
             user_defined=user_defined
         )
 
@@ -467,7 +508,17 @@ class Group(Entity):
     def name(self):
         """Return the name of the group."""
         return self._name
-
+        
+    # @property
+    # def exclude(self):
+        # """Return the name of the group."""
+        # return self.exclude
+        
+    # @exclude.setter
+    # def exclude(self, value):
+        # """Set Group name."""
+        # self.exclude = value
+        
     @name.setter
     def name(self, value):
         """Set Group name."""
@@ -502,6 +553,8 @@ class Group(Entity):
             ATTR_ENTITY_ID: self.tracking,
             ATTR_ORDER: self._order,
         }
+        if self.exclude:
+            data[ATTR_EXCLUDE] = self.exclude
         if not self._user_defined:
             data[ATTR_AUTO] = True
         if self.view:

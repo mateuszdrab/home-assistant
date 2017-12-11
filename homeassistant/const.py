@@ -67,10 +67,10 @@ CONF_ELEVATION = 'elevation'
 CONF_EMAIL = 'email'
 CONF_ENTITIES = 'entities'
 CONF_ENTITY_ID = 'entity_id'
+CONF_EXCLUDE = 'exclude'
 CONF_ENTITY_NAMESPACE = 'entity_namespace'
 CONF_ENTITY_PICTURE_TEMPLATE = 'entity_picture_template'
 CONF_EVENT = 'event'
-CONF_EXCLUDE = 'exclude'
 CONF_FILE_PATH = 'file_path'
 CONF_FILENAME = 'filename'
 CONF_FOR = 'for'
@@ -217,6 +217,9 @@ ATTR_SERVICE_CALL_ID = 'service_call_id'
 
 # Contains one string or a list of strings, each being an entity id
 ATTR_ENTITY_ID = 'entity_id'
+
+# Contains one string or a list of strings, each being an entity id of entities to be excluded from enumeration of entity ids
+ATTR_EXCLUDE = 'exclude'
 
 # String with a friendly name for the entity
 ATTR_FRIENDLY_NAME = 'friendly_name'

@@ -6,7 +6,7 @@ from typing import Optional  # NOQA
 
 import voluptuous as vol
 
-from homeassistant.const import ATTR_ENTITY_ID
+from homeassistant.const import ATTR_ENTITY_ID, ATTR_EXCLUDE
 from homeassistant.core import HomeAssistant  # NOQA
 from homeassistant.exceptions import TemplateError
 from homeassistant.loader import get_component, bind_hass
@@ -16,6 +16,7 @@ from homeassistant.util.async import run_coroutine_threadsafe
 CONF_SERVICE = 'service'
 CONF_SERVICE_TEMPLATE = 'service_template'
 CONF_SERVICE_ENTITY_ID = 'entity_id'
+CONF_SERVICE_EXCLUDE = 'exclude'
 CONF_SERVICE_DATA = 'data'
 CONF_SERVICE_DATA_TEMPLATE = 'data_template'
 
@@ -77,6 +78,9 @@ def async_call_from_config(hass, config, blocking=False, variables=None,
 
     if CONF_SERVICE_ENTITY_ID in config:
         service_data[ATTR_ENTITY_ID] = config[CONF_SERVICE_ENTITY_ID]
+        
+    if CONF_SERVICE_EXCLUDE in config:
+        service_data[ATTR_EXCLUDE] = config[CONF_SERVICE_EXCLUDE]
 
     yield from hass.services.async_call(
         domain, service_name, service_data, blocking)
@@ -97,17 +101,25 @@ def extract_entity_ids(hass, service_call, expand_group=True):
 
     # Entity ID attr can be a list or a string
     service_ent_id = service_call.data[ATTR_ENTITY_ID]
+    
+    service_excl_ids = []
+    
+    if (service_call.data and ATTR_EXCLUDE in service_call.data):   
+        service_exclude_ids = service_call.data[ATTR_EXCLUDE]
+        if isinstance(service_exclude_ids, str):
+            service_excl_ids = group.get_excluded_members(hass, service_exclude_ids)
+        else:
+            for service_exclude_id in service_exclude_ids:
+                service_excl_ids.extend(group.get_excluded_members(hass, service_exclude_id))
 
     if expand_group:
-
+        service_ent_ids = []
         if isinstance(service_ent_id, str):
-            return group.expand_entity_ids(hass, [service_ent_id])
-
-        return [ent_id for ent_id in
-                group.expand_entity_ids(hass, service_ent_id)]
-
+            service_ent_ids = group.expand_entity_ids(hass, [service_ent_id])
+        else:
+            service_ent_ids = [ent_id for ent_id in group.expand_entity_ids(hass, service_ent_id)]
+        return [ent_id for ent_id in service_ent_ids if ent_id not in service_excl_ids]
     else:
-
         if isinstance(service_ent_id, str):
             return [service_ent_id]
 
