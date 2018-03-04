@@ -64,7 +64,49 @@ LOCATION:Hamburg
 DESCRIPTION:What a beautiful day
 END:VEVENT
 END:VCALENDAR
+""",
+    """BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Global Corp.//CalDAV Client//EN
+BEGIN:VEVENT
+UID:4
+DTSTAMP:20171125T000000Z
+DTSTART:20171127
+SUMMARY:This is an event without dtend or duration
+LOCATION:Hamburg
+DESCRIPTION:What an endless day
+END:VEVENT
+END:VCALENDAR
+""",
+    """BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Global Corp.//CalDAV Client//EN
+BEGIN:VEVENT
+UID:5
+DTSTAMP:20171125T000000Z
+DTSTART:20171127
+DURATION:PT1H
+SUMMARY:This is an event with duration
+LOCATION:Hamburg
+DESCRIPTION:What a day
+END:VEVENT
+END:VCALENDAR
+""",
+    """BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Global Corp.//CalDAV Client//EN
+BEGIN:VEVENT
+UID:6
+DTSTAMP:20171125T000000Z
+DTSTART:20171127T100000Z
+DURATION:PT1H
+SUMMARY:This is an event with duration
+LOCATION:Hamburg
+DESCRIPTION:What a day
+END:VEVENT
+END:VCALENDAR
 """
+
 ]
 
 
@@ -121,8 +163,10 @@ class TestComponentsWebDavCalendar(unittest.TestCase):
             assert len(devices) == 2
             assert devices[0].name == "First"
             assert devices[0].dev_id == "First"
+            self.assertFalse(devices[0].data.include_all_day)
             assert devices[1].name == "Second"
             assert devices[1].dev_id == "Second"
+            self.assertFalse(devices[1].data.include_all_day)
 
         caldav.setup_platform(self.hass,
                               {
@@ -167,6 +211,7 @@ class TestComponentsWebDavCalendar(unittest.TestCase):
             assert len(devices) == 1
             assert devices[0].name == "HomeOffice"
             assert devices[0].dev_id == "Second HomeOffice"
+            self.assertTrue(devices[0].data.include_all_day)
 
         caldav.setup_platform(self.hass,
                               {
