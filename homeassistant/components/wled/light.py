@@ -60,6 +60,7 @@ async def async_setup_entry(
 class WLEDMainLight(WLEDEntity, LightEntity):
     """Defines a WLED main light."""
 
+    _attr_name = None
     _attr_color_mode = ColorMode.BRIGHTNESS
     _attr_translation_key = "main"
     _attr_supported_features = LightEntityFeature.TRANSITION
@@ -125,12 +126,7 @@ class WLEDSegmentLight(WLEDEntity, LightEntity):
         super().__init__(coordinator=coordinator)
         self._segment = segment
 
-        # Segment 0 uses a simpler name, which is more natural for when using
-        # a single segment / using WLED with one big LED strip.
-        if segment == 0:
-            self._attr_name = None
-        else:
-            self._attr_translation_placeholders = {"segment": str(segment)}
+        self._attr_translation_placeholders = {"segment": str(segment)}
 
         self._attr_unique_id = (
             f"{self.coordinator.data.info.mac_address}_{self._segment}"

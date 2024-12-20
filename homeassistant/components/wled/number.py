@@ -84,11 +84,8 @@ class WLEDNumber(WLEDEntity, NumberEntity):
         super().__init__(coordinator=coordinator)
         self.entity_description = description
 
-        # Segment 0 uses a simpler name, which is more natural for when using
-        # a single segment / using WLED with one big LED strip.
-        if segment != 0:
-            self._attr_translation_key = f"segment_{description.translation_key}"
-            self._attr_translation_placeholders = {"segment": str(segment)}
+        self._attr_translation_key = f"segment_{description.translation_key}"
+        self._attr_translation_placeholders = {"segment": str(segment)}
 
         self._attr_unique_id = (
             f"{coordinator.data.info.mac_address}_{description.key}_{segment}"
